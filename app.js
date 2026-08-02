@@ -52,6 +52,17 @@ const CHEERS = [
   "Записал! Главное — регулярность, и она у тебя есть"
 ];
 
+// Заголовки экрана «молодец» после отметки
+const DONE_TITLES = ["Молодец!", "Красавчик!", "Есть!", "Сделано!", "Вот это дисциплина!"];
+
+// Мотивашки на день, когда ещё не занимался (без серии и без близкого уровня)
+const NUDGES = [
+  "Один подход сегодня — и такты сами разберутся",
+  "15 минут за инструментом лучше, чем ноль",
+  "Пианино скучает. Загляни к нему сегодня",
+  "Маленькое занятие сегодня > большие планы на завтра"
+];
+
 const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ══════════════ Состояние ══════════════ */
@@ -228,19 +239,32 @@ function addSession() {
 
   render();
   const leveledUp = maybeLevelUp(hobby, before, totalXp(hobby.id));
+  if (leveledUp) return; // новый уровень — сатисфакция уже на весь экран
 
-  // Подбодрить, даже если до нового уровня ещё далеко
-  if (!leveledUp) {
-    let cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-    if (hobby.leveled) {
-      const li = levelInfo(totalXp(hobby.id));
-      if (li.next) {
-        const left = Math.ceil((li.next.xp - li.xp) / XP_PER_SESSION);
-        cheer += ` · до уровня ${li.next.n} — ${left} ${plural(left, "занятие", "занятия", "занятий")}`;
-      }
-    }
-    toast(cheer);
+  if (selectedDate === todayStr()) {
+    showDone(hobby);
+  } else {
+    // задним числом — без «возвращайся завтра», просто подбодрить
+    toast(CHEERS[Math.floor(Math.random() * CHEERS.length)]);
   }
+}
+
+// Экран «молодец, возвращайся завтра» после сегодняшней отметки
+function showDone(hobby) {
+  const todayCnt = hobbySessions(hobby.id).filter(s => s.date === todayStr()).length;
+  const st = streak(hobby.id);
+
+  $("#doneEmoji").textContent = todayCnt >= 2 ? "🔥" : "🎉";
+  $("#doneTitle").textContent = todayCnt >= 2
+    ? `${todayCnt}-е занятие за день!`
+    : DONE_TITLES[Math.floor(Math.random() * DONE_TITLES.length)];
+
+  let text = "+" + XP_PER_SESSION + " XP в копилку. ";
+  if (st >= 2) text += `Серия — ${st} ${plural(st, "день", "дня", "дней")} подряд. Возвращайся завтра, будет ${st + 1} 🔥`;
+  else text += "Возвращайся завтра — начнём серию дней подряд!";
+  $("#doneText").textContent = text;
+
+  $("#doneOv").classList.add("show");
 }
 
 function deleteSession(id) {
@@ -268,10 +292,56 @@ function switchHobby(id) {
 function render() {
   renderTabs();
   renderLevel();
+  renderToday();
   renderLog();
   renderWeek();
   renderCalendar();
   renderDay();
+}
+
+// Карточка-мотиватор: зовёт позаниматься сегодня или хвалит, если уже отметился
+function renderToday() {
+  const hobby = activeHobby();
+  const block = $("#todayBlock");
+  if (!hobby) { block.innerHTML = ""; return; }
+
+  const todayCnt = hobbySessions(hobby.id).filter(s => s.date === todayStr()).length;
+  const st = streak(hobby.id);
+  let cls, emoji, text;
+
+  if (todayCnt > 0) {
+    cls = "done";
+    emoji = todayCnt >= 2 ? "🔥" : "✅";
+    text = todayCnt >= 2
+      ? `Сегодня уже <b>${todayCnt} ${plural(todayCnt, "занятие", "занятия", "занятий")}</b> — жгёшь! Возвращайся завтра`
+      : `На сегодня — всё, молодец! Возвращайся завтра — серия станет <b>${st + 1} ${plural(st + 1, "день", "дня", "дней")}</b>`;
+  } else {
+    cls = "call";
+    const li = hobby.leveled ? levelInfo(totalXp(hobby.id)) : null;
+    const left = li && li.next ? Math.ceil((li.next.xp - li.xp) / XP_PER_SESSION) : 99;
+
+    if (left === 1) {
+      emoji = "⚡";
+      text = `До уровня ${li.next.n} «${esc(li.next.name)}» — <b>одно занятие</b>. Может, прямо сегодня?`;
+    } else if (st >= 2) {
+      emoji = "🔥";
+      text = `Серия — <b>${st} ${plural(st, "день", "дня", "дней")} подряд</b>! Сыграешь сегодня — будет ${st + 1}`;
+    } else if (st === 1) {
+      emoji = "🎹";
+      text = `Вчера занимался — сыграй сегодня, и <b>начнётся серия</b>`;
+    } else {
+      emoji = "🎹";
+      // стабильная в течение дня, но новая каждый день
+      const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
+      text = NUDGES[seed % NUDGES.length];
+    }
+  }
+
+  block.innerHTML = `
+    <div class="today-card ${cls}">
+      <span class="today-emoji">${emoji}</span>
+      <span class="today-text">${text}</span>
+    </div>`;
 }
 
 function renderTabs() {
@@ -622,6 +692,10 @@ function init() {
   $("#lvlupOk").addEventListener("click", () => $("#lvlup").classList.remove("show"));
   $("#lvlup").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) $("#lvlup").classList.remove("show");
+  });
+  $("#doneOk").addEventListener("click", () => $("#doneOv").classList.remove("show"));
+  $("#doneOv").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) $("#doneOv").classList.remove("show");
   });
 
   document.addEventListener("visibilitychange", () => {
