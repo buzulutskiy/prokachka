@@ -451,13 +451,20 @@ function render() {
   renderDay();
 }
 
+const ROW_BARS = 10; // тактов в ряду карты
+
 function barMap(arr, cls) {
   const bars = data.piece.bars;
   let html = "";
-  for (let b = 1; b <= bars; b++) {
-    const n = arr[b] || 0;
-    const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
-    html += `<i class="bar l${lvl} ${cls}" title="Такт ${b}: ${n ? n + " " + plural(n, "проход", "прохода", "проходов") : "не разобран"}"></i>`;
+  for (let start = 1; start <= bars; start += ROW_BARS) {
+    let cells = "";
+    for (let b = start; b < start + ROW_BARS; b++) {
+      if (b > bars) { cells += `<i class="bar ghost"></i>`; continue; }
+      const n = arr[b] || 0;
+      const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
+      cells += `<i class="bar l${lvl} ${cls}" title="Такт ${b}: ${n ? n + " " + plural(n, "проход", "прохода", "проходов") : "не разобран"}"></i>`;
+    }
+    html += `<div class="bar-row"><span class="bar-num">${start}</span><div class="bar-cells">${cells}</div></div>`;
   }
   return html;
 }

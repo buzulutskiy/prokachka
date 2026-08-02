@@ -198,19 +198,36 @@
     .hand-head b { color: var(--ink); font-weight: 800; font-size: 1rem; }
 
     /* карта тактов */
-    .bars {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px;
+    .bars { display: grid; gap: 4px; }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 20px 1fr;
+      align-items: center;
+      gap: 8px;
     }
+
+    .bar-num {
+      font-size: 0.68rem;
+      color: #5d5872;
+      font-weight: 700;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar-cells {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 4px;
+    }
+
     .bar {
-      flex: 1 1 12px;
-      min-width: 10px;
-      height: 20px;
-      border-radius: 4px;
+      height: 22px;
+      border-radius: 5px;
       background: rgba(255, 255, 255, 0.06);
       transition: background 0.3s;
     }
+    .bar.ghost { background: none; }
     .bar.l1.r { background: rgba(255, 201, 77, 0.32); }
     .bar.l2.r { background: rgba(255, 201, 77, 0.62); }
     .bar.l3.r { background: linear-gradient(180deg, var(--gold), var(--gold-2)); }
