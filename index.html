@@ -187,7 +187,7 @@
       padding: 0;
     }
 
-    .hand { display: grid; gap: 6px; }
+    .hand { display: grid; gap: 7px; }
     .hand-head {
       display: flex;
       justify-content: space-between;
@@ -195,11 +195,38 @@
       font-size: 0.88rem;
       color: var(--muted);
     }
-    .hand-head b { color: var(--ink); font-weight: 750; }
-    .xp-fill.vio {
-      background: linear-gradient(90deg, #a99cf9, var(--violet));
-      box-shadow: 0 0 14px rgba(139, 124, 246, 0.5);
+    .hand-head b { color: var(--ink); font-weight: 800; font-size: 1rem; }
+
+    /* карта тактов */
+    .bars {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
     }
+    .bar {
+      flex: 1 1 12px;
+      min-width: 10px;
+      height: 20px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      transition: background 0.3s;
+    }
+    .bar.l1.r { background: rgba(255, 201, 77, 0.32); }
+    .bar.l2.r { background: rgba(255, 201, 77, 0.62); }
+    .bar.l3.r { background: linear-gradient(180deg, var(--gold), var(--gold-2)); }
+    .bar.l1.l { background: rgba(139, 124, 246, 0.32); }
+    .bar.l2.l { background: rgba(139, 124, 246, 0.62); }
+    .bar.l3.l { background: linear-gradient(180deg, #a99cf9, var(--violet)); }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .legend .bar { flex: 0 0 auto; width: 14px; height: 14px; }
 
     .level-title { min-width: 0; }
     .level-title .lname { font-size: 1.32rem; font-weight: 800; line-height: 1.15; }
@@ -271,6 +298,9 @@
       color: var(--muted);
     }
     .lrow.done .ln { background: rgba(74, 222, 128, 0.16); color: var(--green); }
+    .lrow.done .lh { color: var(--green); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .lrow.locked { opacity: 0.42; }
+    .lrow.locked .lt { letter-spacing: 0.12em; }
     .lrow.now .ln { background: linear-gradient(140deg, var(--gold), var(--gold-2)); color: #241a05; }
     .lrow.now .lt { color: var(--gold); font-weight: 750; }
     .lrow .lh { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
@@ -312,26 +342,108 @@
       text-transform: uppercase; letter-spacing: 0.09em;
       color: var(--muted);
     }
-    .log-date .ld-day { font-size: 0.88rem; color: var(--gold); font-weight: 700; }
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .date-nav button {
+      min-height: 32px;
+      padding: 0 8px;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+    .date-nav button:disabled { opacity: 0.25; }
+    .log-date .ld-day {
+      font-size: 0.88rem;
+      color: var(--gold);
+      font-weight: 700;
+      padding: 0 6px;
+      border-bottom: 1px dashed rgba(255, 201, 77, 0.5);
+    }
 
-    .stepper-row {
-      display: grid;
-      grid-template-columns: 1fr auto 34px;
+    .marked-note {
+      display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 10px;
-    }
-    .st-label {
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      padding: 11px 13px;
       font-size: 0.9rem;
-      font-weight: 650;
-      line-height: 1.25;
-    }
-    .st-label i {
-      font-style: normal;
       color: var(--muted);
-      font-size: 0.74rem;
-      font-weight: 500;
     }
+    .marked-note button {
+      margin-left: auto;
+      color: var(--violet);
+      font-weight: 700;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    /* выбор руки */
+    .hand-pick {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+    .hp {
+      min-height: 46px;
+      border-radius: 13px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+    .hp.on {
+      color: var(--ink);
+      border-color: rgba(255, 201, 77, 0.6);
+      background: linear-gradient(180deg, rgba(255, 201, 77, 0.16), rgba(255, 201, 77, 0.05));
+    }
+
+    /* диапазон тактов */
+    .range {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .range-part { display: grid; gap: 5px; justify-items: center; }
+    .rp-label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-weight: 700;
+    }
+
+    .pending {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 11px;
+    }
+    .pchip {
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 18px;
+      background: rgba(74, 222, 128, 0.14);
+      border: 1px solid rgba(74, 222, 128, 0.35);
+      color: var(--green);
+      font-weight: 700;
+      font-size: 0.86rem;
+    }
+
+    .add-span {
+      margin-top: 11px;
+      color: var(--violet);
+      font-weight: 650;
+      font-size: 0.88rem;
+      min-height: 34px;
+    }
+
     .stepper {
       display: flex;
       align-items: center;
@@ -359,14 +471,8 @@
       font-weight: 800;
       color: var(--gold);
     }
-    .st-delta {
-      color: var(--green);
-      font-weight: 800;
-      font-size: 0.95rem;
-      text-align: right;
-    }
-
     .log-btn {
+      margin-top: 14px;
       width: 100%;
       min-height: 64px;
       border-radius: 18px;
@@ -667,9 +773,13 @@
     <section class="card">
       <div class="log-date">
         <span class="ld-label">Отметить занятие</span>
-        <span class="ld-day" id="logDay"></span>
+        <div class="date-nav">
+          <button id="dayPrev" type="button" aria-label="День назад">‹</button>
+          <button class="ld-day" id="logDay" type="button"></button>
+          <button id="dayNext" type="button" aria-label="День вперёд">›</button>
+        </div>
       </div>
-      <div id="steppers"></div>
+      <div id="logBox"></div>
       <button class="log-btn" id="logBtn" type="button">
         <span class="log-emoji">🎹</span>
         <span>Позанимался!</span>

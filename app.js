@@ -2,30 +2,26 @@
 
 /* ══════════════ Константы ══════════════ */
 
-const LS = { data: "prokachka-data-v2", dataOld: "prokachka-data-v1", cfg: "prokachka-cfg-v1" };
+const LS = { data: "prokachka-data-v3", old2: "prokachka-data-v2", old1: "prokachka-data-v1", cfg: "prokachka-cfg-v1" };
 const GIST_FILE = "prokachka.json";
 const GIST_DESC = "Прокачка — трекер разбора композиций (данные приложения)";
 
-// Композиция по умолчанию (название и число тактов правятся в карточке)
-const DEFAULT_PIECE = {
-  name: "Бах — Прелюдия es-moll, BWV 853",
-  bars: 40
-};
+const DEFAULT_PIECE = { name: "Бах — Прелюдия es-moll, BWV 853", bars: 40 };
 
-// Подбадривания (для отметок задним числом и просто так)
+// Сколько проходов по такту считаем «закреплено»
+const FIRM_AT = 3;
+
 const CHEERS = [
   "Отлично! Такты сами себя не разберут — а ты разобрал",
-  "Есть! Ещё кусочек композиции твой",
+  "Есть! Ещё кусочек прелюдии твой",
   "Красавчик, Бах бы одобрил",
   "Плюс в копилку — так и разбирают великое",
   "Сессия засчитана. Руки помнят!",
   "Хорошая работа, продолжаем разбор"
 ];
 
-// Заголовки экрана «молодец» после отметки
 const DONE_TITLES = ["Молодец!", "Красавчик!", "Есть!", "Сделано!", "Вот это дисциплина!"];
 
-// Мотивашки на день, когда ещё не занимался
 const NUDGES = [
   "Один подход сегодня — и ещё пара тактов твои",
   "15 минут за инструментом лучше, чем ноль",
@@ -38,11 +34,14 @@ const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 /* ══════════════ Состояние ══════════════ */
 
 let data = { piece: null, entries: [] };
-let cfg = { token: "", gistId: "", lastSync: 0 };
+let cfg = { token: "", gistId: "", lastSync: 0, seenAch: [] };
 
 let calYear, calMonth;
 let selectedDate = todayStr();
-let selRight = 0, selLeft = 0;   // значения степперов «до какого такта»
+let pickHand = "right";       // right | left | both
+let pickFrom = 1, pickTo = 1; // выбранный диапазон тактов
+let pending = [];             // добавленные фрагменты текущего занятия
+let addMode = false;          // дополняем уже отмеченный день
 let pushTimer = null;
 let syncing = false;
 
@@ -61,6 +60,7 @@ function fromStr(s) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+function daysBetween(a, b) { return Math.round((fromStr(b) - fromStr(a)) / 864e5); }
 
 function fmtDay(s) {
   const t = todayStr();
@@ -79,7 +79,7 @@ function toast(text) {
   el.textContent = text;
   el.classList.add("show");
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.classList.remove("show"), 2200);
+  toast.t = setTimeout(() => el.classList.remove("show"), 2400);
 }
 
 function plural(n, one, few, many) {
@@ -90,52 +90,77 @@ function plural(n, one, few, many) {
 }
 
 function takty(n) { return `${n} ${plural(n, "такт", "такта", "тактов")}`; }
+function handIcon(h) { return h === "left" ? "𝄢" : "𝄞"; }
+function handName(h) { return h === "left" ? "левая" : "правая"; }
+function spanText(s) {
+  return `${handIcon(s.hand)} ${s.from === s.to ? s.from + "-й такт" : s.from + "–" + s.to}`;
+}
 
 /* ══════════════ Хранилище и миграция ══════════════ */
 
-// Приводит данные любой прошлой схемы к v2 {piece, entries}
+// Любая прошлая схема → v3 {piece, entries:[{spans:[{hand,from,to}]}]}
 function migrate(obj) {
   if (!obj || typeof obj !== "object") return { piece: null, entries: [] };
-  if (Array.isArray(obj.entries)) return { piece: obj.piece || null, entries: obj.entries };
-  // v1: {hobbies, sessions} — переносим отмеченные дни, тактов тогда ещё не было
-  const entries = (obj.sessions || []).map(s => ({
-    id: s.id, date: s.date, right: null, left: null,
-    note: s.note || "", createdAt: s.createdAt || 0, updatedAt: s.updatedAt || 0,
-    deleted: s.deleted
-  }));
-  return { piece: null, entries };
+
+  // v3
+  if (Array.isArray(obj.entries) && obj.entries.some(e => Array.isArray(e.spans))) {
+    return { piece: obj.piece || null, entries: obj.entries };
+  }
+  // v2: entries с right/left «до какого такта»
+  if (Array.isArray(obj.entries)) {
+    return {
+      piece: obj.piece || null,
+      entries: obj.entries.map(e => {
+        const spans = [];
+        if (e.right) spans.push({ hand: "right", from: 1, to: e.right });
+        if (e.left) spans.push({ hand: "left", from: 1, to: e.left });
+        return { id: e.id, date: e.date, spans, note: e.note || "", createdAt: e.createdAt || 0, updatedAt: e.updatedAt || 0, deleted: e.deleted };
+      })
+    };
+  }
+  // v1: sessions (тактов не было)
+  return {
+    piece: null,
+    entries: (obj.sessions || []).map(s => ({
+      id: s.id, date: s.date, spans: [], note: s.note || "",
+      createdAt: s.createdAt || 0, updatedAt: s.updatedAt || 0, deleted: s.deleted
+    }))
+  };
 }
 
 function load() {
+  let raw = null;
   try {
-    const raw = JSON.parse(localStorage.getItem(LS.data) || "null")
-      || JSON.parse(localStorage.getItem(LS.dataOld) || "null");
-    data = migrate(raw);
-  } catch { data = { piece: null, entries: [] }; }
+    raw = JSON.parse(localStorage.getItem(LS.data) || "null")
+      || JSON.parse(localStorage.getItem(LS.old2) || "null")
+      || JSON.parse(localStorage.getItem(LS.old1) || "null");
+  } catch {}
+  data = migrate(raw);
   try { cfg = Object.assign(cfg, JSON.parse(localStorage.getItem(LS.cfg)) || {}); } catch {}
-
+  if (!Array.isArray(cfg.seenAch)) cfg.seenAch = [];
   if (!data.piece) data.piece = { ...DEFAULT_PIECE, updatedAt: 0 };
 }
 
 function saveData() { localStorage.setItem(LS.data, JSON.stringify(data)); }
 function saveCfg() { localStorage.setItem(LS.cfg, JSON.stringify(cfg)); }
 
-/* ══════════════ Выборки ══════════════ */
+/* ══════════════ Выборки и статистика ══════════════ */
 
 function entries() { return data.entries.filter(e => !e.deleted); }
-
 function entryFor(date) { return entries().find(e => e.date === date); }
 
-// Прогресс: до какого такта дошла каждая рука (максимум по всем записям)
-function progress(beforeDate) {
-  let right = 0, left = 0;
-  for (const e of entries()) {
-    if (beforeDate && e.date >= beforeDate) continue;
-    if (e.right) right = Math.max(right, e.right);
-    if (e.left) left = Math.max(left, e.left);
-  }
+// Сколько раз пройден каждый такт каждой рукой
+function passes() {
   const bars = data.piece.bars;
-  return { right: Math.min(right, bars), left: Math.min(left, bars) };
+  const right = new Array(bars + 1).fill(0);
+  const left = new Array(bars + 1).fill(0);
+  for (const e of entries()) {
+    for (const s of e.spans || []) {
+      const arr = s.hand === "left" ? left : right;
+      for (let b = Math.max(1, s.from); b <= Math.min(bars, s.to); b++) arr[b]++;
+    }
+  }
+  return { right, left };
 }
 
 function streak() {
@@ -153,115 +178,238 @@ function mondayOf(d) {
   return r;
 }
 
+// Полная статистика — на ней же работают достижения
+function stats() {
+  const bars = data.piece.bars;
+  const p = passes();
+  const list = entries().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+
+  const count = (arr, min) => arr.slice(1).filter(v => v >= min).length;
+  const touchedR = count(p.right, 1), touchedL = count(p.left, 1);
+  const firmR = count(p.right, FIRM_AT), firmL = count(p.left, FIRM_AT);
+  const maxPass = Math.max(0, ...p.right.slice(1), ...p.left.slice(1));
+
+  let bothInOne = false, maxRun = 0, weekend = false, comeback = false, totalBarsWorked = 0;
+  let prevDate = null;
+  for (const e of list) {
+    const hands = new Set((e.spans || []).map(s => s.hand));
+    if (hands.size >= 2) bothInOne = true;
+    for (const s of e.spans || []) {
+      maxRun = Math.max(maxRun, s.to - s.from + 1);
+      totalBarsWorked += s.to - s.from + 1;
+    }
+    const dow = fromStr(e.date).getDay();
+    if (dow === 0 || dow === 6) weekend = true;
+    if (prevDate && daysBetween(prevDate, e.date) >= 7) comeback = true;
+    prevDate = e.date;
+  }
+
+  return {
+    bars, passes: p, days: list.length, streak: streak(),
+    touchedR, touchedL, firmR, firmL, maxPass,
+    pctR: bars ? touchedR / bars * 100 : 0,
+    pctL: bars ? touchedL / bars * 100 : 0,
+    pct: bars ? (touchedR + touchedL) / (bars * 2) * 100 : 0,
+    pctFirm: bars ? (firmR + firmL) / (bars * 2) * 100 : 0,
+    bothInOne, maxRun, weekend, comeback, totalBarsWorked
+  };
+}
+
 function weekStats() {
   const start = dateStr(mondayOf(new Date()));
-  const days = new Set(entries().filter(e => e.date >= start).map(e => e.date));
-  const cur = progress();
-  const before = progress(start);
-  const bars = Math.max(0, (cur.right + cur.left) - (before.right + before.left));
-  return { count: days.size, bars };
+  const list = entries().filter(e => e.date >= start);
+  let worked = 0;
+  for (const e of list) for (const s of e.spans || []) worked += s.to - s.from + 1;
+  return { days: list.length, worked };
 }
 
 /* ══════════════ Достижения ══════════════ */
 
-function milestoneList() {
-  const bars = data.piece.bars;
-  const q = (p) => Math.max(1, Math.round(bars * p));
-  const { right, left } = progress();
-  const both = right + left, total = bars * 2;
+// secret: не показываем даже намёка, пока не открыто
+const ACHIEVEMENTS = [
+  { id: "first",    icon: "🌱", name: "Первое касание",     hint: "Отметить первое занятие",              test: s => s.days >= 1 },
+  { id: "bar1",     icon: "🎯", name: "Первый такт",        hint: "Разобрать хотя бы один такт",          test: s => s.touchedR + s.touchedL >= 1 },
+  { id: "r10",      icon: "𝄞", name: "Правая проснулась",  hint: "10% правой руки",                      test: s => s.pctR >= 10 },
+  { id: "l10",      icon: "𝄢", name: "Левая подтянулась",  hint: "10% левой руки",                       test: s => s.pctL >= 10 },
+  { id: "both",     icon: "🤲", name: "В четыре руки",      hint: "Обе руки за одно занятие",             test: s => s.bothInOne },
+  { id: "again",    icon: "🔁", name: "А ну-ка ещё разок",  hint: "Пройти один такт трижды",              test: s => s.maxPass >= 3 },
+  { id: "streak3",  icon: "🔥", name: "Три дня подряд",     hint: "Серия из 3 дней",                      test: s => s.streak >= 3 },
+  { id: "q1",       icon: "🧗", name: "Четверть пути",      hint: "25% композиции",                       test: s => s.pct >= 25 },
+  { id: "run8",     icon: "🏃", name: "Длинный забег",      hint: "8 тактов подряд за одно занятие",      test: s => s.maxRun >= 8 },
+  { id: "weekend",  icon: "🎩", name: "Выходной у рояля",   hint: "Позаниматься в субботу или воскресенье", test: s => s.weekend, secret: true },
+  { id: "streak7",  icon: "🗓️", name: "Неделя без пропусков", hint: "Серия из 7 дней",                   test: s => s.streak >= 7 },
+  { id: "stubborn", icon: "🪨", name: "Упрямец",            hint: "Один такт — семь раз",                 test: s => s.maxPass >= 7, secret: true },
+  { id: "r50",      icon: "🌗", name: "Половина правой",    hint: "50% правой руки",                      test: s => s.pctR >= 50 },
+  { id: "l50",      icon: "🌗", name: "Половина левой",     hint: "50% левой руки",                       test: s => s.pctL >= 50 },
+  { id: "half",     icon: "⛰️", name: "Половина пути",      hint: "50% композиции",                       test: s => s.pct >= 50 },
+  { id: "firm10",   icon: "🧱", name: "Крепкий фундамент",  hint: `10 тактов пройдены по ${FIRM_AT} раза`, test: s => s.firmR + s.firmL >= 10 },
+  { id: "days20",   icon: "📚", name: "Двадцать вечеров",   hint: "20 занятий всего",                     test: s => s.days >= 20 },
+  { id: "comeback", icon: "🌙", name: "Возвращение",        hint: "Вернуться после недельного перерыва",  test: s => s.comeback, secret: true },
+  { id: "streak14", icon: "💎", name: "Две недели подряд",  hint: "Серия из 14 дней",                     test: s => s.streak >= 14 },
+  { id: "q3",       icon: "🧠", name: "Три четверти",       hint: "75% композиции",                       test: s => s.pct >= 75 },
+  { id: "streak30", icon: "👑", name: "Месяц дисциплины",   hint: "Серия из 30 дней",                     test: s => s.streak >= 30 },
+  { id: "r100",     icon: "🏅", name: "Правая рука готова", hint: "100% правой руки",                     test: s => s.pctR >= 100 },
+  { id: "l100",     icon: "🏅", name: "Левая рука готова",  hint: "100% левой руки",                      test: s => s.pctL >= 100 },
+  { id: "all100",   icon: "🎼", name: "Вся вещь пройдена",  hint: "100% композиции обеими руками",        test: s => s.pct >= 100 },
+  { id: "polished", icon: "💍", name: "Отшлифовано",        hint: `Каждый такт пройден по ${FIRM_AT} раза`, test: s => s.pctFirm >= 100 },
+  { id: "bach",     icon: "🏆", name: "Бах доволен",        hint: "Разобрать вещь целиком и отшлифовать её", test: s => s.pct >= 100 && s.pctFirm >= 100 && s.days >= 30, secret: true }
+];
 
-  return [
-    { id: "first", icon: "🌱", name: "Первые такты", need: "любой рукой", done: both > 0 },
-    { id: "r25", icon: "𝄞", name: "Правая: четверть", need: `до ${q(0.25)}-го такта`, done: right >= q(0.25) },
-    { id: "l25", icon: "𝄢", name: "Левая: четверть", need: `до ${q(0.25)}-го такта`, done: left >= q(0.25) },
-    { id: "r50", icon: "𝄞", name: "Правая: половина", need: `до ${q(0.5)}-го такта`, done: right >= q(0.5) },
-    { id: "l50", icon: "𝄢", name: "Левая: половина", need: `до ${q(0.5)}-го такта`, done: left >= q(0.5) },
-    { id: "half", icon: "⛰️", name: "Половина пути", need: "суммарно по обеим рукам", done: both >= total / 2 },
-    { id: "r75", icon: "𝄞", name: "Правая: три четверти", need: `до ${q(0.75)}-го такта`, done: right >= q(0.75) },
-    { id: "l75", icon: "𝄢", name: "Левая: три четверти", need: `до ${q(0.75)}-го такта`, done: left >= q(0.75) },
-    { id: "r100", icon: "🏅", name: "Правая рука готова!", need: `все ${bars} тактов`, done: right >= bars },
-    { id: "l100", icon: "🏅", name: "Левая рука готова!", need: `все ${bars} тактов`, done: left >= bars },
-    { id: "complete", icon: "🏆", name: "Композиция разобрана!", need: "обе руки целиком", done: right >= bars && left >= bars }
-  ];
+// Тексты поздравлений — эмоциональные, по делу
+const ACH_WORDS = {
+  first: "Начало положено. Дальше — только интереснее",
+  bar1: "Первый такт — уже не ноль. Отсюда растёт вся прелюдия",
+  r10: "Правая рука вошла во вкус",
+  l10: "Левая догоняет — бас держит всё здание",
+  both: "Обе руки за один вечер. Так рождается ансамбль",
+  again: "Повтор — не топтание на месте, а то, как учат по-настоящему",
+  streak3: "Три дня подряд. Это уже не случайность, это привычка",
+  q1: "Четверть прелюдии в руках. Разгон закончен, поехали",
+  run8: "Восемь тактов за раз — уверенный, широкий заход",
+  weekend: "Выходной — а ты за инструментом. Уважение",
+  streak7: "Целая неделя без пропусков. Дисциплина уровня «профи»",
+  stubborn: "Этот такт не сдавался семь раз. Ты оказался упрямее",
+  r50: "Половина правой руки. Мелодия уже узнаётся",
+  l50: "Половина левой. Гармония встала на место",
+  half: "Половина пути пройдена. Вторая всегда идёт быстрее",
+  firm10: "Десять тактов не просто пройдены — они закреплены",
+  days20: "Двадцать вечеров за инструментом. Это уже история",
+  comeback: "Вернулся после перерыва — самое сложное и самое ценное",
+  streak14: "Две недели подряд. Мало кто доходит до этой отметки",
+  q3: "Три четверти! Финиш уже виден",
+  streak30: "Месяц без единого пропуска. Это уровень характера",
+  r100: "Правая рука знает прелюдию от первой до последней ноты",
+  l100: "Левая рука прошла всю вещь. Фундамент готов",
+  all100: "Вся прелюдия пройдена обеими руками. Огромная работа!",
+  polished: "Каждый такт отшлифован. Теперь это твоя музыка",
+  bach: "Ты прошёл её целиком, закрепил и не бросил. Бах бы пожал руку"
+};
+
+function achState() {
+  const s = stats();
+  return ACHIEVEMENTS.map(a => ({ ...a, done: !!a.test(s) }));
 }
-
-function doneIds() { return new Set(milestoneList().filter(m => m.done).map(m => m.id)); }
 
 /* ══════════════ Действия ══════════════ */
 
+function normSpan(hand, from, to) {
+  const bars = data.piece.bars;
+  let f = Math.max(1, Math.min(bars, from));
+  let t = Math.max(1, Math.min(bars, to));
+  if (t < f) [f, t] = [t, f];
+  return { hand, from: f, to: t };
+}
+
+function currentSpans() {
+  if (pending.length) return pending.slice();
+  return pickHand === "both"
+    ? [normSpan("right", pickFrom, pickTo), normSpan("left", pickFrom, pickTo)]
+    : [normSpan(pickHand, pickFrom, pickTo)];
+}
+
+function addPending() {
+  const add = pickHand === "both"
+    ? [normSpan("right", pickFrom, pickTo), normSpan("left", pickFrom, pickTo)]
+    : [normSpan(pickHand, pickFrom, pickTo)];
+  pending.push(...add);
+  toast("Фрагмент добавлен — выбери следующий");
+  renderLog();
+}
+
 function saveDay() {
-  if (entryFor(selectedDate)) {
+  const existing = entryFor(selectedDate);
+  if (existing && !addMode) {
     toast(selectedDate === todayStr() ? "Сегодня уже отмечено — возвращайся завтра!" : "Этот день уже отмечен");
     return;
   }
 
-  const before = progress();
-  const beforeDone = doneIds();
+  const before = stats();
+  const beforeDone = new Set(achState().filter(a => a.done).map(a => a.id));
+  const spans = currentSpans();
+  const note = $("#noteInput").value.trim();
 
-  data.entries.push({
-    id: uid(),
-    date: selectedDate,
-    right: selRight || null,
-    left: selLeft || null,
-    note: $("#noteInput").value.trim(),
-    createdAt: now(),
-    updatedAt: now()
-  });
+  if (existing) {
+    existing.spans = (existing.spans || []).concat(spans);
+    if (note) existing.note = existing.note ? existing.note + "; " + note : note;
+    existing.updatedAt = now();
+  } else {
+    data.entries.push({
+      id: uid(),
+      date: selectedDate,
+      spans,
+      note,
+      createdAt: now(),
+      updatedAt: now()
+    });
+  }
   $("#noteInput").value = "";
+  pending = [];
+  addMode = false;
   saveData();
   schedulePush();
 
-  const after = progress();
-  const dRight = Math.max(0, after.right - before.right);
-  const dLeft = Math.max(0, after.left - before.left);
+  const after = stats();
+  const gained = (after.touchedR + after.touchedL) - (before.touchedR + before.touchedL);
+  const dPct = after.pct - before.pct;
 
   const pop = $("#xpPop");
-  pop.textContent = dRight + dLeft > 0 ? "+" + takty(dRight + dLeft) : "🎹";
+  pop.textContent = dPct >= 0.05 ? "+" + dPct.toFixed(1).replace(".", ",") + "%" : "🎹";
   pop.classList.remove("go");
   void pop.offsetWidth;
   pop.classList.add("go");
 
   render();
 
-  // новое достижение — праздник на весь экран
-  const fresh = milestoneList().filter(m => m.done && !beforeDone.has(m.id));
+  const fresh = achState().filter(a => a.done && !beforeDone.has(a.id));
   if (fresh.length) {
-    const m = fresh[fresh.length - 1];
-    $("#lvlupNum").textContent = m.icon;
-    $("#lvlupName").textContent = m.name;
-    $("#lvlupDesc").textContent = m.id === "complete"
-      ? "Ты разобрал её целиком. Теперь — шлифовать и наслаждаться!"
-      : "Достижение открыто. Разбор движется!";
-    $("#lvlup").classList.add("show");
+    fresh.forEach(a => { if (!cfg.seenAch.includes(a.id)) cfg.seenAch.push(a.id); });
+    saveCfg();
+    showAchievement(fresh[fresh.length - 1], fresh.length);
     return;
   }
 
-  if (selectedDate === todayStr()) showDone(dRight, dLeft);
-  else toast(CHEERS[Math.floor(Math.random() * CHEERS.length)]);
+  if (selectedDate === todayStr() && !existing) showDone(spans, gained, dPct, after);
+  else if (existing) toast("Добавлено: " + spans.map(spanText).join(", "));
+  else toast(`${fmtDay(selectedDate)} отмечено · ` + CHEERS[Math.floor(Math.random() * CHEERS.length)]);
 }
 
-// Экран «молодец, возвращайся завтра»
-function showDone(dRight, dLeft) {
-  const st = streak();
-  const p = progress();
+function showAchievement(a, count) {
+  $("#lvlupNum").textContent = a.icon;
+  $("#lvlupName").textContent = a.name;
+  $("#lvlupDesc").textContent = (ACH_WORDS[a.id] || a.hint) + (count > 1 ? ` · и ещё ${count - 1} достижение открыто!` : "");
+  $("#lvlup").classList.add("show");
+}
 
-  $("#doneEmoji").textContent = st >= 2 ? "🔥" : "🎉";
+function showDone(spans, gained, dPct, st) {
+  $("#doneEmoji").textContent = st.streak >= 2 ? "🔥" : "🎉";
   $("#doneTitle").textContent = DONE_TITLES[Math.floor(Math.random() * DONE_TITLES.length)];
 
-  let text;
-  if (dRight + dLeft > 0) {
-    const parts = [];
-    if (dRight) parts.push(`+${takty(dRight)} правой`);
-    if (dLeft) parts.push(`+${takty(dLeft)} левой`);
-    text = parts.join(", ") + `. Правая — ${p.right}/${data.piece.bars}, левая — ${p.left}/${data.piece.bars}. `;
-  } else {
-    text = "Повторение — мать учения: пройденные такты стали крепче. ";
-  }
-  if (st >= 2) text += `Серия — ${st} ${plural(st, "день", "дня", "дней")} подряд, возвращайся завтра, будет ${st + 1} 🔥`;
+  let text = spans.map(spanText).join(", ") + ". ";
+  if (gained > 0) text += `+${takty(gained)} к разбору, всего ${Math.round(st.pct)}%. `;
+  else text += "Повторение — эти такты стали крепче. ";
+  if (st.streak >= 2) text += `Серия — ${st.streak} ${plural(st.streak, "день", "дня", "дней")} подряд, возвращайся завтра, будет ${st.streak + 1} 🔥`;
   else text += "Возвращайся завтра — начнём серию!";
   $("#doneText").textContent = text;
 
   $("#doneOv").classList.add("show");
+}
+
+// Переход к другому дню: сбрасываем черновик и подтягиваем календарь
+function goToDate(ds) {
+  if (ds > todayStr()) { toast("Это ещё в будущем 🙂"); return; }
+  selectedDate = ds;
+  pending = [];
+  addMode = false;
+  const d = fromStr(ds);
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  render();
+}
+
+function shiftDay(delta) {
+  const d = fromStr(selectedDate);
+  d.setDate(d.getDate() + delta);
+  goToDate(dateStr(d));
 }
 
 function deleteEntry(id) {
@@ -271,7 +419,6 @@ function deleteEntry(id) {
   e.updatedAt = now();
   saveData();
   schedulePush();
-  syncSteppers();
   render();
   toast("Запись удалена");
 }
@@ -286,19 +433,14 @@ function editPiece() {
   data.piece.name = name.trim() || data.piece.name;
   data.piece.bars = bars;
   data.piece.updatedAt = now();
+  pickFrom = Math.min(pickFrom, bars);
+  pickTo = Math.min(pickTo, bars);
   saveData();
   schedulePush();
-  syncSteppers();
   render();
 }
 
 /* ══════════════ Рендер ══════════════ */
-
-function syncSteppers() {
-  const p = progress();
-  selRight = p.right;
-  selLeft = p.left;
-}
 
 function render() {
   renderPiece();
@@ -309,70 +451,106 @@ function render() {
   renderDay();
 }
 
-function renderPiece() {
+function barMap(arr, cls) {
   const bars = data.piece.bars;
-  const p = progress();
-  const pct = Math.round((p.right + p.left) / (bars * 2) * 100);
-  const ms = milestoneList();
-  const next = ms.find(m => !m.done);
+  let html = "";
+  for (let b = 1; b <= bars; b++) {
+    const n = arr[b] || 0;
+    const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
+    html += `<i class="bar l${lvl} ${cls}" title="Такт ${b}: ${n ? n + " " + plural(n, "проход", "прохода", "проходов") : "не разобран"}"></i>`;
+  }
+  return html;
+}
+
+function renderPiece() {
+  const s = stats();
+  const ach = achState();
+  const openCount = ach.filter(a => a.done).length;
+  const next = ach.find(a => !a.done && !a.secret);
 
   $("#levelBlock").innerHTML = `
     <div class="level-card">
       <div class="level-top">
-        <div class="level-badge"><b>${pct}<i>%</i></b><span>разобрано</span></div>
+        <div class="level-badge"><b>${Math.round(s.pct)}<i>%</i></b><span>разобрано</span></div>
         <div class="level-title">
           <div class="lname">${esc(data.piece.name)}</div>
-          <div class="ldesc">${bars} тактов · <button class="piece-edit" id="pieceEdit" type="button">изменить</button></div>
+          <div class="ldesc">${s.bars} тактов · <button class="piece-edit" id="pieceEdit" type="button">изменить</button></div>
         </div>
       </div>
 
-      <div class="hand" data-hand="right">
+      <div class="hand">
         <div class="hand-head">
           <span>𝄞 Правая · скрипичный ключ</span>
-          <b>${p.right} / ${bars}</b>
+          <b>${Math.round(s.pctR)}%</b>
         </div>
-        <div class="xp-bar"><div class="xp-fill" style="width:${(p.right / bars * 100).toFixed(1)}%"></div></div>
+        <div class="bars">${barMap(s.passes.right, "r")}</div>
       </div>
 
-      <div class="hand" data-hand="left">
+      <div class="hand">
         <div class="hand-head">
           <span>𝄢 Левая · басовый ключ</span>
-          <b>${p.left} / ${bars}</b>
+          <b>${Math.round(s.pctL)}%</b>
         </div>
-        <div class="xp-bar"><div class="xp-fill vio" style="width:${(p.left / bars * 100).toFixed(1)}%"></div></div>
+        <div class="bars">${barMap(s.passes.left, "l")}</div>
       </div>
 
-      ${next ? `
-        <div class="level-next">
-          Следующая цель: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.need)}
-        </div>` : `
-        <div class="level-next">🏆 Композиция разобрана целиком — пора выбирать следующую!</div>`}
+      <div class="legend">
+        <span><i class="bar l0"></i> не трогал</span>
+        <span><i class="bar l1 r"></i> разобрал</span>
+        <span><i class="bar l3 r"></i> закрепил (${FIRM_AT}+)</span>
+      </div>
 
-      <button class="ladder-toggle" id="ladderBtn" type="button">Все достижения ›</button>
+      <div class="level-next">
+        Открыто достижений: <b>${openCount} из ${ACHIEVEMENTS.length}</b>${next ? ` · ближайшее: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}` : " — все!"}
+      </div>
+
+      <button class="ladder-toggle" id="ladderBtn" type="button">Достижения ›</button>
       <div class="ladder" id="ladder">
-        ${ms.map(m => `
-          <div class="lrow ${m.done ? "done" : m === next ? "now" : ""}">
-            <span class="ln">${m.done ? "✓" : m.icon}</span>
-            <span class="lt">${esc(m.name)}</span>
-            <span class="lh"></span>
-            <span class="ld">${esc(m.need)}</span>
-          </div>`).join("")}
+        ${(() => {
+          let teased = 0;
+          return ach.map(a => {
+            if (a.done) {
+              return `
+                <div class="lrow done">
+                  <span class="ln">${a.icon}</span>
+                  <span class="lt">${esc(a.name)}</span>
+                  <span class="lh">открыто</span>
+                  <span class="ld">${esc(ACH_WORDS[a.id] || a.hint)}</span>
+                </div>`;
+            }
+            // закрытые: пару ближайших дразним, остальные — тайна
+            if (!a.secret && teased < 2) {
+              teased++;
+              return `
+                <div class="lrow now">
+                  <span class="ln">🔒</span>
+                  <span class="lt">${esc(a.name)}</span>
+                  <span class="lh"></span>
+                  <span class="ld">${esc(a.hint)}</span>
+                </div>`;
+            }
+            return `
+              <div class="lrow locked">
+                <span class="ln">🔒</span>
+                <span class="lt">???</span>
+                <span class="lh"></span>
+                <span class="ld">Откроется по ходу разбора</span>
+              </div>`;
+          }).join("");
+        })()}
       </div>
     </div>`;
 
   $("#pieceEdit").addEventListener("click", editPiece);
   $("#ladderBtn").addEventListener("click", () => {
     const open = $("#ladder").classList.toggle("open");
-    $("#ladderBtn").textContent = open ? "Свернуть ‹" : "Все достижения ›";
+    $("#ladderBtn").textContent = open ? "Свернуть ‹" : "Достижения ›";
   });
 }
 
 function renderToday() {
-  const block = $("#todayBlock");
   const doneToday = !!entryFor(todayStr());
   const st = streak();
-  const p = progress();
-  const bars = data.piece.bars;
   let cls, emoji, text;
 
   if (doneToday) {
@@ -381,21 +559,22 @@ function renderToday() {
     text = `На сегодня — всё, молодец! Возвращайся завтра — серия станет <b>${st + 1} ${plural(st + 1, "день", "дня", "дней")}</b>`;
   } else {
     cls = "call";
-    const next = milestoneList().find(m => !m.done);
-    const closeToNext = next && (
-      (next.id.startsWith("r") && Math.round(bars * ({ r25: 0.25, r50: 0.5, r75: 0.75, r100: 1 })[next.id]) - p.right <= 2) ||
-      (next.id.startsWith("l") && Math.round(bars * ({ l25: 0.25, l50: 0.5, l75: 0.75, l100: 1 })[next.id]) - p.left <= 2)
-    );
+    const s = stats();
+    const next = achState().find(a => !a.done && !a.secret);
+    const closeStreak = next && next.id.startsWith("streak");
 
-    if (closeToNext) {
-      emoji = "⚡";
-      text = `Достижение ${next.icon} «<b>${esc(next.name)}</b>» совсем рядом — пара тактов сегодня, и оно твоё`;
+    if (closeStreak && st >= 2) {
+      emoji = "🔥";
+      text = `Серия — <b>${st} ${plural(st, "день", "дня", "дней")} подряд</b>! Сыграешь сегодня — будет ${st + 1}, а там и ${next.icon} «${esc(next.name)}»`;
     } else if (st >= 2) {
       emoji = "🔥";
       text = `Серия — <b>${st} ${plural(st, "день", "дня", "дней")} подряд</b>! Сыграешь сегодня — будет ${st + 1}`;
     } else if (st === 1) {
       emoji = "🎹";
       text = `Вчера занимался — сыграй сегодня, и <b>начнётся серия</b>`;
+    } else if (next && s.days > 0) {
+      emoji = "⚡";
+      text = `Следующее достижение: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}`;
     } else {
       const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
       emoji = "🎹";
@@ -403,7 +582,7 @@ function renderToday() {
     }
   }
 
-  block.innerHTML = `
+  $("#todayBlock").innerHTML = `
     <div class="today-card ${cls}">
       <span class="today-emoji">${emoji}</span>
       <span class="today-text">${text}</span>
@@ -412,64 +591,101 @@ function renderToday() {
 
 function renderLog() {
   $("#logDay").textContent = fmtDay(selectedDate);
+  $("#dayNext").disabled = selectedDate >= todayStr();
 
   const marked = !!entryFor(selectedDate);
   const bars = data.piece.bars;
-  const p = progress();
+  const box = $("#logBox");
 
-  $("#steppers").innerHTML = marked ? "" : `
-    <div class="stepper-row">
-      <span class="st-label">𝄞 Правая<br><i>до какого такта</i></span>
-      <div class="stepper">
-        <button class="st-btn" data-hand="r" data-d="-1" type="button">−</button>
-        <button class="st-val" data-hand="r" type="button">${selRight}</button>
-        <button class="st-btn" data-hand="r" data-d="1" type="button">＋</button>
+  if (marked && !addMode) {
+    box.innerHTML = `
+      <div class="marked-note">
+        <span>✅ ${selectedDate === todayStr() ? "Сегодня уже отмечено" : "Этот день отмечен"}</span>
+        <button id="addMore" type="button">＋ дополнить</button>
+      </div>`;
+    $("#noteRow").style.display = "none";
+    $("#addMore").addEventListener("click", () => { addMode = true; renderLog(); });
+  } else {
+    $("#noteRow").style.display = "";
+    box.innerHTML = `
+      <div class="hand-pick">
+        ${[["right", "𝄞 Правая"], ["left", "𝄢 Левая"], ["both", "🤲 Обе"]].map(([h, label]) =>
+          `<button class="hp ${pickHand === h ? "on" : ""}" data-hand="${h}" type="button">${label}</button>`).join("")}
       </div>
-      <span class="st-delta">${selRight > p.right ? "+" + (selRight - p.right) : ""}</span>
-    </div>
-    <div class="stepper-row">
-      <span class="st-label">𝄢 Левая<br><i>до какого такта</i></span>
-      <div class="stepper">
-        <button class="st-btn" data-hand="l" data-d="-1" type="button">−</button>
-        <button class="st-val" data-hand="l" type="button">${selLeft}</button>
-        <button class="st-btn" data-hand="l" data-d="1" type="button">＋</button>
+
+      <div class="range">
+        <div class="range-part">
+          <span class="rp-label">с такта</span>
+          <div class="stepper">
+            <button class="st-btn" data-edge="from" data-d="-1" type="button">−</button>
+            <button class="st-val" data-edge="from" type="button">${pickFrom}</button>
+            <button class="st-btn" data-edge="from" data-d="1" type="button">＋</button>
+          </div>
+        </div>
+        <div class="range-part">
+          <span class="rp-label">по такт</span>
+          <div class="stepper">
+            <button class="st-btn" data-edge="to" data-d="-1" type="button">−</button>
+            <button class="st-val" data-edge="to" type="button">${pickTo}</button>
+            <button class="st-btn" data-edge="to" data-d="1" type="button">＋</button>
+          </div>
+        </div>
       </div>
-      <span class="st-delta">${selLeft > p.left ? "+" + (selLeft - p.left) : ""}</span>
-    </div>`;
+
+      ${pending.length ? `<div class="pending">${pending.map((s, i) =>
+        `<button class="pchip" data-i="${i}" type="button">${spanText(s)} ✕</button>`).join("")}</div>` : ""}
+
+      <button class="add-span" id="addSpan" type="button">＋ Добавить ещё фрагмент</button>`;
+
+    document.querySelectorAll(".hp").forEach(b =>
+      b.addEventListener("click", () => { pickHand = b.dataset.hand; renderLog(); }));
+
+    document.querySelectorAll(".st-btn").forEach(b =>
+      b.addEventListener("click", () => {
+        const d = Number(b.dataset.d);
+        if (b.dataset.edge === "from") {
+          pickFrom = Math.min(bars, Math.max(1, pickFrom + d));
+          if (pickTo < pickFrom) pickTo = pickFrom;
+        } else {
+          pickTo = Math.min(bars, Math.max(1, pickTo + d));
+          if (pickFrom > pickTo) pickFrom = pickTo;
+        }
+        renderLog();
+      }));
+
+    document.querySelectorAll(".st-val").forEach(b =>
+      b.addEventListener("click", () => {
+        const v = prompt(b.dataset.edge === "from" ? "С какого такта?" : "По какой такт?", b.textContent);
+        if (v === null) return;
+        const n = Math.round(Number(v.replace(",", ".")));
+        if (isNaN(n) || n < 1 || n > bars) { toast(`Такт от 1 до ${bars}`); return; }
+        if (b.dataset.edge === "from") { pickFrom = n; if (pickTo < n) pickTo = n; }
+        else { pickTo = n; if (pickFrom > n) pickFrom = n; }
+        renderLog();
+      }));
+
+    document.querySelectorAll(".pchip").forEach(b =>
+      b.addEventListener("click", () => { pending.splice(Number(b.dataset.i), 1); renderLog(); }));
+
+    $("#addSpan").addEventListener("click", addPending);
+  }
 
   const btn = $("#logBtn");
-  btn.classList.toggle("off", marked);
-  btn.innerHTML = marked
+  const locked = marked && !addMode;
+  btn.classList.toggle("off", locked);
+  btn.innerHTML = locked
     ? `<span class="log-emoji">✅</span><span>${selectedDate === todayStr() ? "Сегодня отмечено" : "День отмечен"}</span>`
-    : `<span class="log-emoji">🎹</span><span>Позанимался!</span>`;
-  $("#noteRow").style.display = marked ? "none" : "";
-
-  document.querySelectorAll(".st-btn").forEach(b =>
-    b.addEventListener("click", () => {
-      const d = Number(b.dataset.d);
-      if (b.dataset.hand === "r") selRight = Math.min(bars, Math.max(0, selRight + d));
-      else selLeft = Math.min(bars, Math.max(0, selLeft + d));
-      renderLog();
-    }));
-
-  document.querySelectorAll(".st-val").forEach(b =>
-    b.addEventListener("click", () => {
-      const hand = b.dataset.hand === "r" ? "правой" : "левой";
-      const v = prompt(`До какого такта разобрал ${hand} рукой?`, b.textContent);
-      if (v === null) return;
-      const n = Math.round(Number(v.replace(",", ".")));
-      if (isNaN(n) || n < 0 || n > bars) { toast(`Число от 0 до ${bars}`); return; }
-      if (b.dataset.hand === "r") selRight = n; else selLeft = n;
-      renderLog();
-    }));
+    : addMode
+      ? `<span class="log-emoji">＋</span><span>Добавить к записи</span>`
+      : `<span class="log-emoji">🎹</span><span>${selectedDate === todayStr() ? "Позанимался!" : "Отметить этот день"}</span>`;
 }
 
 function renderWeek() {
   const w = weekStats();
   const st = streak();
   $("#weekStats").innerHTML = `
-    <div class="stat"><b>${w.count}</b><span>${plural(w.count, "день", "дня", "дней")} на этой неделе</span></div>
-    <div class="stat"><b>+${w.bars}</b><span>${plural(w.bars, "такт", "такта", "тактов")} за неделю</span></div>
+    <div class="stat"><b>${w.days}</b><span>${plural(w.days, "день", "дня", "дней")} на этой неделе</span></div>
+    <div class="stat"><b>${w.worked}</b><span>${plural(w.worked, "такт пройден", "такта пройдено", "тактов пройдено")}</span></div>
     <div class="stat"><b>${st}</b><span>${plural(st, "день подряд", "дня подряд", "дней подряд")}</span></div>`;
 }
 
@@ -500,8 +716,7 @@ function renderCalendar() {
   document.querySelectorAll(".day[data-date]").forEach(el =>
     el.addEventListener("click", () => {
       if (el.dataset.date > todayStr()) { toast("Это ещё в будущем 🙂"); return; }
-      selectedDate = el.dataset.date;
-      render();
+      goToDate(el.dataset.date);
     }));
 }
 
@@ -510,19 +725,15 @@ function renderDay() {
   $("#dayTitle").textContent = "Запись · " + fmtDay(selectedDate);
 
   if (!e) {
-    $("#dayList").innerHTML = `<div class="empty">Этот день не отмечен — жми «Позанимался», чтобы записать</div>`;
+    $("#dayList").innerHTML = `<div class="empty">Этот день не отмечен — выбери такты и жми «Позанимался»</div>`;
     return;
   }
 
-  const parts = [];
-  if (e.right) parts.push(`𝄞 до ${e.right}-го`);
-  if (e.left) parts.push(`𝄢 до ${e.left}-го`);
-  const what = parts.length ? parts.join(" · ") : "повторение";
-
+  const what = (e.spans || []).length ? e.spans.map(spanText).join(" · ") : "занимался";
   $("#dayList").innerHTML = `
     <div class="sess">
       <span class="smin">${what}</span>
-      <span class="snote">${e.note ? esc(e.note) : "занимался"}</span>
+      <span class="snote">${e.note ? esc(e.note) : ""}</span>
       <button class="sdel" data-id="${e.id}" type="button" aria-label="Удалить">✕</button>
     </div>`;
 
@@ -622,10 +833,9 @@ async function connectGitHub(token) {
 }
 
 function exportData() {
-  return { v: 2, savedAt: now(), piece: data.piece, entries: data.entries };
+  return { v: 3, savedAt: now(), piece: data.piece, entries: data.entries };
 }
 
-// Слияние по id: побеждает более свежий updatedAt
 function mergeLists(local, remote) {
   const map = new Map();
   for (const item of remote || []) map.set(item.id, item);
@@ -656,9 +866,7 @@ async function syncNow(manual) {
 
     const localJson = JSON.stringify(data.piece) + JSON.stringify(data.entries);
     data.entries = mergeLists(data.entries, remote.entries);
-    if (remote.piece && (remote.piece.updatedAt || 0) > (data.piece.updatedAt || 0)) {
-      data.piece = remote.piece;
-    }
+    if (remote.piece && (remote.piece.updatedAt || 0) > (data.piece.updatedAt || 0)) data.piece = remote.piece;
     cleanTombstones();
     saveData();
 
@@ -675,7 +883,7 @@ async function syncNow(manual) {
 
     cfg.lastSync = now(); saveCfg();
     setSyncDot("ok");
-    if (mergedJson !== localJson) { syncSteppers(); render(); }
+    if (mergedJson !== localJson) render();
     if (manual) toast("Синхронизировано");
   } catch (e) {
     setSyncDot("err");
@@ -703,10 +911,12 @@ function init() {
   const t = new Date();
   calYear = t.getFullYear();
   calMonth = t.getMonth();
-  syncSteppers();
 
   $("#gearBtn").addEventListener("click", openSettings);
   $("#logBtn").addEventListener("click", saveDay);
+  $("#dayPrev").addEventListener("click", () => shiftDay(-1));
+  $("#dayNext").addEventListener("click", () => shiftDay(1));
+  $("#logDay").addEventListener("click", () => goToDate(todayStr()));
   $("#setClose").addEventListener("click", () => $("#settings").close());
   $("#calPrev").addEventListener("click", () => {
     calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
