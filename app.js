@@ -451,22 +451,17 @@ function render() {
   renderDay();
 }
 
-const ROW_BARS = 10; // тактов в ряду карты
-
+// Компактная полоса: все такты в одну строку
 function barMap(arr, cls) {
   const bars = data.piece.bars;
-  let html = "";
-  for (let start = 1; start <= bars; start += ROW_BARS) {
-    let cells = "";
-    for (let b = start; b < start + ROW_BARS; b++) {
-      if (b > bars) { cells += `<i class="bar ghost"></i>`; continue; }
-      const n = arr[b] || 0;
-      const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
-      cells += `<i class="bar l${lvl} ${cls}" title="Такт ${b}: ${n ? n + " " + plural(n, "проход", "прохода", "проходов") : "не разобран"}"></i>`;
-    }
-    html += `<div class="bar-row"><span class="bar-num">${start}</span><div class="bar-cells">${cells}</div></div>`;
+  let cells = "";
+  for (let b = 1; b <= bars; b++) {
+    const n = arr[b] || 0;
+    const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
+    const tick = b % 10 === 0 && b !== bars ? " tick" : "";
+    cells += `<i class="bar l${lvl} ${cls}${tick}" title="Такт ${b}: ${n ? n + " " + plural(n, "проход", "прохода", "проходов") : "не разобран"}"></i>`;
   }
-  return html;
+  return `<div class="bar-strip" style="--n:${bars}">${cells}</div>`;
 }
 
 function renderPiece() {
@@ -684,9 +679,9 @@ function renderLog() {
 
   const btn = $("#logBtn");
   const locked = marked && !addMode;
-  btn.classList.toggle("off", locked);
+  btn.style.display = locked ? "none" : ""; // о том, что день отмечен, уже сказано выше
   btn.innerHTML = locked
-    ? `<span class="log-emoji">✅</span><span>${selectedDate === todayStr() ? "Сегодня отмечено" : "День отмечен"}</span>`
+    ? ""
     : addMode
       ? `<span class="log-emoji">＋</span><span>Добавить к записи</span>`
       : `<span class="log-emoji">🎹</span><span>${selectedDate === todayStr() ? "Позанимался!" : "Отметить этот день"}</span>`;

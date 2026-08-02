@@ -197,37 +197,23 @@
     }
     .hand-head b { color: var(--ink); font-weight: 800; font-size: 1rem; }
 
-    /* карта тактов */
-    .bars { display: grid; gap: 4px; }
-
-    .bar-row {
+    /* карта тактов — одна компактная полоса */
+    .bar-strip {
       display: grid;
-      grid-template-columns: 20px 1fr;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .bar-num {
-      font-size: 0.68rem;
-      color: #5d5872;
-      font-weight: 700;
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .bar-cells {
-      display: grid;
-      grid-template-columns: repeat(10, 1fr);
-      gap: 4px;
+      grid-template-columns: repeat(var(--n), 1fr);
+      gap: 2px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 7px;
+      padding: 3px;
     }
 
     .bar {
-      height: 22px;
-      border-radius: 5px;
-      background: rgba(255, 255, 255, 0.06);
+      height: 18px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.07);
       transition: background 0.3s;
     }
-    .bar.ghost { background: none; }
+    .bar.tick { margin-right: 2px; }
     .bar.l1.r { background: rgba(255, 201, 77, 0.32); }
     .bar.l2.r { background: rgba(255, 201, 77, 0.62); }
     .bar.l3.r { background: linear-gradient(180deg, var(--gold), var(--gold-2)); }
@@ -243,7 +229,7 @@
       color: var(--muted);
     }
     .legend span { display: inline-flex; align-items: center; gap: 5px; }
-    .legend .bar { flex: 0 0 auto; width: 14px; height: 14px; }
+    .legend .bar { flex: 0 0 auto; width: 13px; height: 13px; border-radius: 3px; }
 
     .level-title { min-width: 0; }
     .level-title .lname { font-size: 1.32rem; font-weight: 800; line-height: 1.15; }
