@@ -176,8 +176,30 @@
       place-items: center;
       box-shadow: 0 6px 22px rgba(255, 175, 60, 0.35);
     }
-    .level-badge b { font-size: 1.7rem; line-height: 1; font-weight: 850; }
-    .level-badge span { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
+    .level-badge b { font-size: 1.55rem; line-height: 1; font-weight: 850; }
+    .level-badge b i { font-style: normal; font-size: 0.9rem; }
+    .level-badge span { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; }
+
+    .piece-edit {
+      color: var(--violet);
+      font-size: 0.86rem;
+      font-weight: 650;
+      padding: 0;
+    }
+
+    .hand { display: grid; gap: 6px; }
+    .hand-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .hand-head b { color: var(--ink); font-weight: 750; }
+    .xp-fill.vio {
+      background: linear-gradient(90deg, #a99cf9, var(--violet));
+      box-shadow: 0 0 14px rgba(139, 124, 246, 0.5);
+    }
 
     .level-title { min-width: 0; }
     .level-title .lname { font-size: 1.32rem; font-weight: 800; line-height: 1.15; }
@@ -291,6 +313,58 @@
       color: var(--muted);
     }
     .log-date .ld-day { font-size: 0.88rem; color: var(--gold); font-weight: 700; }
+
+    .stepper-row {
+      display: grid;
+      grid-template-columns: 1fr auto 34px;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .st-label {
+      font-size: 0.9rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+    .st-label i {
+      font-style: normal;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 500;
+    }
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 4px;
+    }
+    .st-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 1.25rem;
+      font-weight: 700;
+      display: grid;
+      place-items: center;
+    }
+    .st-btn:active { background: rgba(255, 201, 77, 0.25); }
+    .st-val {
+      min-width: 46px;
+      text-align: center;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--gold);
+    }
+    .st-delta {
+      color: var(--green);
+      font-weight: 800;
+      font-size: 0.95rem;
+      text-align: right;
+    }
 
     .log-btn {
       width: 100%;
@@ -586,8 +660,6 @@
       <button class="gear" id="gearBtn" aria-label="Настройки">⚙️</button>
     </header>
 
-    <nav class="hobby-tabs" id="hobbyTabs"></nav>
-
     <section id="levelBlock"></section>
 
     <section id="todayBlock"></section>
@@ -597,14 +669,14 @@
         <span class="ld-label">Отметить занятие</span>
         <span class="ld-day" id="logDay"></span>
       </div>
+      <div id="steppers"></div>
       <button class="log-btn" id="logBtn" type="button">
         <span class="log-emoji">🎹</span>
         <span>Позанимался!</span>
-        <span class="log-xp">+10 XP</span>
       </button>
-      <div class="note-row">
+      <div class="note-row" id="noteRow">
         <input class="note-input" id="noteInput" type="text" maxlength="80"
-               placeholder="Что разбирал? (необязательно)" autocomplete="off">
+               placeholder="Заметка (необязательно)" autocomplete="off">
       </div>
     </section>
 

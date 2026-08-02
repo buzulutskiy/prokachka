@@ -2,62 +2,32 @@
 
 /* ══════════════ Константы ══════════════ */
 
-const LS = { data: "prokachka-data-v1", cfg: "prokachka-cfg-v1" };
+const LS = { data: "prokachka-data-v2", dataOld: "prokachka-data-v1", cfg: "prokachka-cfg-v1" };
 const GIST_FILE = "prokachka.json";
-const GIST_DESC = "Прокачка — трекер хобби (данные приложения)";
+const GIST_DESC = "Прокачка — трекер разбора композиций (данные приложения)";
 
-// Лестница уровней для пианино. Валюта прогресса — опыт: одно занятие = +10 XP.
-// Сколько сидел — 15 минут, полчаса или час — не важно: сел, поразбирал такты, отметил.
-// Первые уровни берутся за одно-три занятия, дальше шаг растёт плавно — чтобы
-// прогресс чувствовался часто, а поздние уровни оставались честными.
-const XP_PER_SESSION = 10;
+// Композиция по умолчанию (название и число тактов правятся в карточке)
+const DEFAULT_PIECE = {
+  name: "Бах — Прелюдия es-moll, BWV 853",
+  bars: 40
+};
 
-const PIANO_LEVELS = [
-  { n: 1,  name: "Старт",             xp: 0,     desc: "Самое сложное — начать, и ты уже здесь" },
-  { n: 2,  name: "Первый подход",     xp: 10,    desc: "Первое занятие в копилке!" },
-  { n: 3,  name: "Разгон",            xp: 30,    desc: "Пальцы начинают вспоминать сами" },
-  { n: 4,  name: "Втянулся",          xp: 60,    desc: "Несколько подходов — и это уже похоже на привычку" },
-  { n: 5,  name: "В ритме",           xp: 100,   desc: "Десять занятий — регулярность налицо" },
-  { n: 6,  name: "Набираю ход",       xp: 150,   desc: "Куски складываются в целое" },
-  { n: 7,  name: "Первые разборы",    xp: 210,   desc: "Композиции собираются из кусков в целые вещи" },
-  { n: 8,  name: "Крепкая база",      xp: 280,   desc: "Целый месяц играющей практики" },
-  { n: 9,  name: "Уверенный ход",     xp: 360,   desc: "Разбор идёт заметно быстрее, чем раньше" },
-  { n: 10, name: "Пара пьес в руках", xp: 450,   desc: "Несколько вещей звучат уверенно от начала до конца" },
-  { n: 11, name: "Накат",             xp: 600,   desc: "Руки сами находят знакомые ходы" },
-  { n: 12, name: "Своя колея",        xp: 750,   desc: "Заниматься стало так же естественно, как пить кофе" },
-  { n: 13, name: "Играющий",          xp: 950,   desc: "Средняя пьеса — это недели разбора, а не месяцы" },
-  { n: 14, name: "Твёрдая рука",      xp: 1200,  desc: "Выученное держится в форме почти само" },
-  { n: 15, name: "Любитель",          xp: 1500,  desc: "Репертуар растёт на глазах" },
-  { n: 16, name: "Крепкий любитель",  xp: 1850,  desc: "Новые такты ложатся с первых повторов" },
-  { n: 17, name: "Своя полка пьес",   xp: 2250,  desc: "Есть что сыграть под любое настроение" },
-  { n: 18, name: "Продвинутый",       xp: 2700,  desc: "Сложные вещи по зубам" },
-  { n: 19, name: "Своя интерпретация", xp: 3300, desc: "Играешь уже не ноты, а музыку" },
-  { n: 20, name: "Почти профи",       xp: 4000,  desc: "Шопен и Дебюсси среднего уровня звучат как надо" },
-  { n: 21, name: "Легенда клавиш",    xp: 4800,  desc: "Столько занятий — о таком пишут в биографиях" },
-  { n: 22, name: "Мастер разбора",    xp: 5700,  desc: "Сложное учится быстро, простое — с листа" },
-  { n: 23, name: "Мастер",            xp: 6800,  desc: "Большой репертуар, уверенность в каждой вещи" },
-  { n: 24, name: "Монумент",          xp: 8000,  desc: "Планка, до которой доходят единицы" },
-  { n: 25, name: "Виртуоз",           xp: 10000, desc: "Уровень, за который не стыдно на любой сцене" }
-];
-
-// Подбадривания после отметки занятия
+// Подбадривания (для отметок задним числом и просто так)
 const CHEERS = [
   "Отлично! Такты сами себя не разберут — а ты разобрал",
   "Есть! Ещё кусочек композиции твой",
-  "Красавчик, инструмент доволен",
-  "Плюс в копилку — так и качаются",
+  "Красавчик, Бах бы одобрил",
+  "Плюс в копилку — так и разбирают великое",
   "Сессия засчитана. Руки помнят!",
-  "Ещё один подход — уровень ближе",
-  "Хорошая работа, продолжаем разбор",
-  "Записал! Главное — регулярность, и она у тебя есть"
+  "Хорошая работа, продолжаем разбор"
 ];
 
 // Заголовки экрана «молодец» после отметки
 const DONE_TITLES = ["Молодец!", "Красавчик!", "Есть!", "Сделано!", "Вот это дисциплина!"];
 
-// Мотивашки на день, когда ещё не занимался (без серии и без близкого уровня)
+// Мотивашки на день, когда ещё не занимался
 const NUDGES = [
-  "Один подход сегодня — и такты сами разберутся",
+  "Один подход сегодня — и ещё пара тактов твои",
   "15 минут за инструментом лучше, чем ноль",
   "Пианино скучает. Загляни к нему сегодня",
   "Маленькое занятие сегодня > большие планы на завтра"
@@ -67,11 +37,12 @@ const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ══════════════ Состояние ══════════════ */
 
-let data = { hobbies: [], sessions: [] };
-let cfg = { token: "", gistId: "", activeHobby: "piano", lastSync: 0 };
+let data = { piece: null, entries: [] };
+let cfg = { token: "", gistId: "", lastSync: 0 };
 
-let calYear, calMonth;          // отображаемый месяц календаря
-let selectedDate = todayStr();  // день, в который пишется занятие
+let calYear, calMonth;
+let selectedDate = todayStr();
+let selRight = 0, selLeft = 0;   // значения степперов «до какого такта»
 let pushTimer = null;
 let syncing = false;
 
@@ -92,11 +63,10 @@ function fromStr(s) {
 }
 
 function fmtDay(s) {
-  const d = fromStr(s);
   const t = todayStr();
   if (s === t) return "сегодня";
   if (s === dateStr(new Date(Date.now() - 864e5))) return "вчера";
-  return new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" }).format(d);
+  return new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" }).format(fromStr(s));
 }
 
 function esc(v) {
@@ -109,7 +79,7 @@ function toast(text) {
   el.textContent = text;
   el.classList.add("show");
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.classList.remove("show"), 2000);
+  toast.t = setTimeout(() => el.classList.remove("show"), 2200);
 }
 
 function plural(n, one, few, many) {
@@ -119,116 +89,120 @@ function plural(n, one, few, many) {
   return many;
 }
 
-/* ══════════════ Хранилище ══════════════ */
+function takty(n) { return `${n} ${plural(n, "такт", "такта", "тактов")}`; }
+
+/* ══════════════ Хранилище и миграция ══════════════ */
+
+// Приводит данные любой прошлой схемы к v2 {piece, entries}
+function migrate(obj) {
+  if (!obj || typeof obj !== "object") return { piece: null, entries: [] };
+  if (Array.isArray(obj.entries)) return { piece: obj.piece || null, entries: obj.entries };
+  // v1: {hobbies, sessions} — переносим отмеченные дни, тактов тогда ещё не было
+  const entries = (obj.sessions || []).map(s => ({
+    id: s.id, date: s.date, right: null, left: null,
+    note: s.note || "", createdAt: s.createdAt || 0, updatedAt: s.updatedAt || 0,
+    deleted: s.deleted
+  }));
+  return { piece: null, entries };
+}
 
 function load() {
-  try { data = Object.assign(data, JSON.parse(localStorage.getItem(LS.data)) || {}); } catch {}
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS.data) || "null")
+      || JSON.parse(localStorage.getItem(LS.dataOld) || "null");
+    data = migrate(raw);
+  } catch { data = { piece: null, entries: [] }; }
   try { cfg = Object.assign(cfg, JSON.parse(localStorage.getItem(LS.cfg)) || {}); } catch {}
 
-  if (!data.hobbies.length) {
-    data.hobbies = [{
-      id: "piano", name: "Пианино", emoji: "🎹", leveled: true,
-      createdAt: now(), updatedAt: now()
-    }];
-  }
-  if (!data.hobbies.some(h => h.id === cfg.activeHobby && !h.deleted)) {
-    cfg.activeHobby = data.hobbies.find(h => !h.deleted)?.id || "piano";
-  }
+  if (!data.piece) data.piece = { ...DEFAULT_PIECE, updatedAt: 0 };
 }
 
 function saveData() { localStorage.setItem(LS.data, JSON.stringify(data)); }
 function saveCfg() { localStorage.setItem(LS.cfg, JSON.stringify(cfg)); }
 
-/* ══════════════ Данные: выборки ══════════════ */
+/* ══════════════ Выборки ══════════════ */
 
-function activeHobby() {
-  return data.hobbies.find(h => h.id === cfg.activeHobby && !h.deleted);
+function entries() { return data.entries.filter(e => !e.deleted); }
+
+function entryFor(date) { return entries().find(e => e.date === date); }
+
+// Прогресс: до какого такта дошла каждая рука (максимум по всем записям)
+function progress(beforeDate) {
+  let right = 0, left = 0;
+  for (const e of entries()) {
+    if (beforeDate && e.date >= beforeDate) continue;
+    if (e.right) right = Math.max(right, e.right);
+    if (e.left) left = Math.max(left, e.left);
+  }
+  const bars = data.piece.bars;
+  return { right: Math.min(right, bars), left: Math.min(left, bars) };
 }
 
-function hobbySessions(hobbyId) {
-  return data.sessions.filter(s => s.hobbyId === hobbyId && !s.deleted);
+function streak() {
+  const days = new Set(entries().map(e => e.date));
+  let n = 0;
+  const d = new Date();
+  if (!days.has(dateStr(d))) d.setDate(d.getDate() - 1);
+  while (days.has(dateStr(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
 }
 
-function totalXp(hobbyId) {
-  return hobbySessions(hobbyId).length * XP_PER_SESSION;
-}
-
-function countByDate(hobbyId) {
-  const map = {};
-  for (const s of hobbySessions(hobbyId)) map[s.date] = (map[s.date] || 0) + 1;
-  return map;
-}
-
-// Понедельник недели, в которую входит дата
 function mondayOf(d) {
   const r = new Date(d);
   r.setDate(r.getDate() - ((r.getDay() + 6) % 7));
   return r;
 }
 
-function weekStats(hobbyId) {
+function weekStats() {
   const start = dateStr(mondayOf(new Date()));
-  const list = hobbySessions(hobbyId).filter(s => s.date >= start);
-  const days = new Set(list.map(s => s.date));
-  return { count: days.size, xp: list.length * XP_PER_SESSION };
+  const days = new Set(entries().filter(e => e.date >= start).map(e => e.date));
+  const cur = progress();
+  const before = progress(start);
+  const bars = Math.max(0, (cur.right + cur.left) - (before.right + before.left));
+  return { count: days.size, bars };
 }
 
-function streak(hobbyId) {
-  const days = new Set(hobbySessions(hobbyId).map(s => s.date));
-  let n = 0;
-  const d = new Date();
-  if (!days.has(dateStr(d))) d.setDate(d.getDate() - 1); // сегодня ещё не занимался — не рвём серию
-  while (days.has(dateStr(d))) { n++; d.setDate(d.getDate() - 1); }
-  return n;
+/* ══════════════ Достижения ══════════════ */
+
+function milestoneList() {
+  const bars = data.piece.bars;
+  const q = (p) => Math.max(1, Math.round(bars * p));
+  const { right, left } = progress();
+  const both = right + left, total = bars * 2;
+
+  return [
+    { id: "first", icon: "🌱", name: "Первые такты", need: "любой рукой", done: both > 0 },
+    { id: "r25", icon: "𝄞", name: "Правая: четверть", need: `до ${q(0.25)}-го такта`, done: right >= q(0.25) },
+    { id: "l25", icon: "𝄢", name: "Левая: четверть", need: `до ${q(0.25)}-го такта`, done: left >= q(0.25) },
+    { id: "r50", icon: "𝄞", name: "Правая: половина", need: `до ${q(0.5)}-го такта`, done: right >= q(0.5) },
+    { id: "l50", icon: "𝄢", name: "Левая: половина", need: `до ${q(0.5)}-го такта`, done: left >= q(0.5) },
+    { id: "half", icon: "⛰️", name: "Половина пути", need: "суммарно по обеим рукам", done: both >= total / 2 },
+    { id: "r75", icon: "𝄞", name: "Правая: три четверти", need: `до ${q(0.75)}-го такта`, done: right >= q(0.75) },
+    { id: "l75", icon: "𝄢", name: "Левая: три четверти", need: `до ${q(0.75)}-го такта`, done: left >= q(0.75) },
+    { id: "r100", icon: "🏅", name: "Правая рука готова!", need: `все ${bars} тактов`, done: right >= bars },
+    { id: "l100", icon: "🏅", name: "Левая рука готова!", need: `все ${bars} тактов`, done: left >= bars },
+    { id: "complete", icon: "🏆", name: "Композиция разобрана!", need: "обе руки целиком", done: right >= bars && left >= bars }
+  ];
 }
 
-/* ══════════════ Уровни ══════════════ */
-
-function levelInfo(xp) {
-  let i = 0;
-  while (i + 1 < PIANO_LEVELS.length && xp >= PIANO_LEVELS[i + 1].xp) i++;
-  const cur = PIANO_LEVELS[i];
-  const next = PIANO_LEVELS[i + 1] || null;
-  const progress = next ? (xp - cur.xp) / (next.xp - cur.xp) : 1;
-  return { cur, next, xp, progress: Math.min(1, Math.max(0, progress)) };
-}
-
-function fmtXp(xp) {
-  return new Intl.NumberFormat("ru").format(Math.round(xp)) + " XP";
-}
-
-function maybeLevelUp(hobby, beforeXp, afterXp) {
-  if (!hobby.leveled) return false;
-  const before = levelInfo(beforeXp).cur.n;
-  const after = levelInfo(afterXp).cur.n;
-  if (after > before) {
-    const lvl = PIANO_LEVELS.find(l => l.n === after);
-    $("#lvlupNum").textContent = lvl.n;
-    $("#lvlupName").textContent = "«" + lvl.name + "»";
-    $("#lvlupDesc").textContent = lvl.desc;
-    $("#lvlup").classList.add("show");
-    return true;
-  }
-  return false;
-}
+function doneIds() { return new Set(milestoneList().filter(m => m.done).map(m => m.id)); }
 
 /* ══════════════ Действия ══════════════ */
 
-function addSession() {
-  const hobby = activeHobby();
-  if (!hobby) return;
-
-  // один день — одно занятие
-  if (hobbySessions(hobby.id).some(s => s.date === selectedDate)) {
+function saveDay() {
+  if (entryFor(selectedDate)) {
     toast(selectedDate === todayStr() ? "Сегодня уже отмечено — возвращайся завтра!" : "Этот день уже отмечен");
     return;
   }
 
-  const before = totalXp(hobby.id);
-  data.sessions.push({
+  const before = progress();
+  const beforeDone = doneIds();
+
+  data.entries.push({
     id: uid(),
-    hobbyId: hobby.id,
     date: selectedDate,
+    right: selRight || null,
+    left: selLeft || null,
     note: $("#noteInput").value.trim(),
     createdAt: now(),
     updatedAt: now()
@@ -237,64 +211,97 @@ function addSession() {
   saveData();
   schedulePush();
 
+  const after = progress();
+  const dRight = Math.max(0, after.right - before.right);
+  const dLeft = Math.max(0, after.left - before.left);
+
   const pop = $("#xpPop");
-  pop.textContent = "+" + XP_PER_SESSION + " XP";
+  pop.textContent = dRight + dLeft > 0 ? "+" + takty(dRight + dLeft) : "🎹";
   pop.classList.remove("go");
   void pop.offsetWidth;
   pop.classList.add("go");
 
   render();
-  const leveledUp = maybeLevelUp(hobby, before, totalXp(hobby.id));
-  if (leveledUp) return; // новый уровень — сатисфакция уже на весь экран
 
-  if (selectedDate === todayStr()) {
-    showDone(hobby);
-  } else {
-    // задним числом — без «возвращайся завтра», просто подбодрить
-    toast(CHEERS[Math.floor(Math.random() * CHEERS.length)]);
+  // новое достижение — праздник на весь экран
+  const fresh = milestoneList().filter(m => m.done && !beforeDone.has(m.id));
+  if (fresh.length) {
+    const m = fresh[fresh.length - 1];
+    $("#lvlupNum").textContent = m.icon;
+    $("#lvlupName").textContent = m.name;
+    $("#lvlupDesc").textContent = m.id === "complete"
+      ? "Ты разобрал её целиком. Теперь — шлифовать и наслаждаться!"
+      : "Достижение открыто. Разбор движется!";
+    $("#lvlup").classList.add("show");
+    return;
   }
+
+  if (selectedDate === todayStr()) showDone(dRight, dLeft);
+  else toast(CHEERS[Math.floor(Math.random() * CHEERS.length)]);
 }
 
-// Экран «молодец, возвращайся завтра» после сегодняшней отметки
-function showDone(hobby) {
-  const st = streak(hobby.id);
+// Экран «молодец, возвращайся завтра»
+function showDone(dRight, dLeft) {
+  const st = streak();
+  const p = progress();
 
   $("#doneEmoji").textContent = st >= 2 ? "🔥" : "🎉";
   $("#doneTitle").textContent = DONE_TITLES[Math.floor(Math.random() * DONE_TITLES.length)];
 
-  let text = "+" + XP_PER_SESSION + " XP в копилку. ";
-  if (st >= 2) text += `Серия — ${st} ${plural(st, "день", "дня", "дней")} подряд. Возвращайся завтра, будет ${st + 1} 🔥`;
-  else text += "Возвращайся завтра — начнём серию дней подряд!";
+  let text;
+  if (dRight + dLeft > 0) {
+    const parts = [];
+    if (dRight) parts.push(`+${takty(dRight)} правой`);
+    if (dLeft) parts.push(`+${takty(dLeft)} левой`);
+    text = parts.join(", ") + `. Правая — ${p.right}/${data.piece.bars}, левая — ${p.left}/${data.piece.bars}. `;
+  } else {
+    text = "Повторение — мать учения: пройденные такты стали крепче. ";
+  }
+  if (st >= 2) text += `Серия — ${st} ${plural(st, "день", "дня", "дней")} подряд, возвращайся завтра, будет ${st + 1} 🔥`;
+  else text += "Возвращайся завтра — начнём серию!";
   $("#doneText").textContent = text;
 
   $("#doneOv").classList.add("show");
 }
 
-function deleteSession(id) {
-  const s = data.sessions.find(x => x.id === id);
-  if (!s) return;
-  s.deleted = true;
-  s.updatedAt = now();
+function deleteEntry(id) {
+  const e = data.entries.find(x => x.id === id);
+  if (!e) return;
+  e.deleted = true;
+  e.updatedAt = now();
   saveData();
   schedulePush();
+  syncSteppers();
   render();
   toast("Запись удалена");
 }
 
-function switchHobby(id) {
-  cfg.activeHobby = id;
-  saveCfg();
-  const t = new Date();
-  calYear = t.getFullYear(); calMonth = t.getMonth();
-  selectedDate = todayStr();
+function editPiece() {
+  const name = prompt("Название композиции:", data.piece.name);
+  if (name === null) return;
+  const barsStr = prompt("Сколько в ней тактов?", String(data.piece.bars));
+  if (barsStr === null) return;
+  const bars = Math.round(Number(barsStr.replace(",", ".")));
+  if (!bars || bars < 1 || bars > 2000) { toast("Не понял число тактов"); return; }
+  data.piece.name = name.trim() || data.piece.name;
+  data.piece.bars = bars;
+  data.piece.updatedAt = now();
+  saveData();
+  schedulePush();
+  syncSteppers();
   render();
 }
 
 /* ══════════════ Рендер ══════════════ */
 
+function syncSteppers() {
+  const p = progress();
+  selRight = p.right;
+  selLeft = p.left;
+}
+
 function render() {
-  renderTabs();
-  renderLevel();
+  renderPiece();
   renderToday();
   renderLog();
   renderWeek();
@@ -302,14 +309,70 @@ function render() {
   renderDay();
 }
 
-// Карточка-мотиватор: зовёт позаниматься сегодня или хвалит, если уже отметился
-function renderToday() {
-  const hobby = activeHobby();
-  const block = $("#todayBlock");
-  if (!hobby) { block.innerHTML = ""; return; }
+function renderPiece() {
+  const bars = data.piece.bars;
+  const p = progress();
+  const pct = Math.round((p.right + p.left) / (bars * 2) * 100);
+  const ms = milestoneList();
+  const next = ms.find(m => !m.done);
 
-  const doneToday = hobbySessions(hobby.id).some(s => s.date === todayStr());
-  const st = streak(hobby.id);
+  $("#levelBlock").innerHTML = `
+    <div class="level-card">
+      <div class="level-top">
+        <div class="level-badge"><b>${pct}<i>%</i></b><span>разобрано</span></div>
+        <div class="level-title">
+          <div class="lname">${esc(data.piece.name)}</div>
+          <div class="ldesc">${bars} тактов · <button class="piece-edit" id="pieceEdit" type="button">изменить</button></div>
+        </div>
+      </div>
+
+      <div class="hand" data-hand="right">
+        <div class="hand-head">
+          <span>𝄞 Правая · скрипичный ключ</span>
+          <b>${p.right} / ${bars}</b>
+        </div>
+        <div class="xp-bar"><div class="xp-fill" style="width:${(p.right / bars * 100).toFixed(1)}%"></div></div>
+      </div>
+
+      <div class="hand" data-hand="left">
+        <div class="hand-head">
+          <span>𝄢 Левая · басовый ключ</span>
+          <b>${p.left} / ${bars}</b>
+        </div>
+        <div class="xp-bar"><div class="xp-fill vio" style="width:${(p.left / bars * 100).toFixed(1)}%"></div></div>
+      </div>
+
+      ${next ? `
+        <div class="level-next">
+          Следующая цель: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.need)}
+        </div>` : `
+        <div class="level-next">🏆 Композиция разобрана целиком — пора выбирать следующую!</div>`}
+
+      <button class="ladder-toggle" id="ladderBtn" type="button">Все достижения ›</button>
+      <div class="ladder" id="ladder">
+        ${ms.map(m => `
+          <div class="lrow ${m.done ? "done" : m === next ? "now" : ""}">
+            <span class="ln">${m.done ? "✓" : m.icon}</span>
+            <span class="lt">${esc(m.name)}</span>
+            <span class="lh"></span>
+            <span class="ld">${esc(m.need)}</span>
+          </div>`).join("")}
+      </div>
+    </div>`;
+
+  $("#pieceEdit").addEventListener("click", editPiece);
+  $("#ladderBtn").addEventListener("click", () => {
+    const open = $("#ladder").classList.toggle("open");
+    $("#ladderBtn").textContent = open ? "Свернуть ‹" : "Все достижения ›";
+  });
+}
+
+function renderToday() {
+  const block = $("#todayBlock");
+  const doneToday = !!entryFor(todayStr());
+  const st = streak();
+  const p = progress();
+  const bars = data.piece.bars;
   let cls, emoji, text;
 
   if (doneToday) {
@@ -318,12 +381,15 @@ function renderToday() {
     text = `На сегодня — всё, молодец! Возвращайся завтра — серия станет <b>${st + 1} ${plural(st + 1, "день", "дня", "дней")}</b>`;
   } else {
     cls = "call";
-    const li = hobby.leveled ? levelInfo(totalXp(hobby.id)) : null;
-    const left = li && li.next ? Math.ceil((li.next.xp - li.xp) / XP_PER_SESSION) : 99;
+    const next = milestoneList().find(m => !m.done);
+    const closeToNext = next && (
+      (next.id.startsWith("r") && Math.round(bars * ({ r25: 0.25, r50: 0.5, r75: 0.75, r100: 1 })[next.id]) - p.right <= 2) ||
+      (next.id.startsWith("l") && Math.round(bars * ({ l25: 0.25, l50: 0.5, l75: 0.75, l100: 1 })[next.id]) - p.left <= 2)
+    );
 
-    if (left === 1) {
+    if (closeToNext) {
       emoji = "⚡";
-      text = `До уровня ${li.next.n} «${esc(li.next.name)}» — <b>одно занятие</b>. Может, прямо сегодня?`;
+      text = `Достижение ${next.icon} «<b>${esc(next.name)}</b>» совсем рядом — пара тактов сегодня, и оно твоё`;
     } else if (st >= 2) {
       emoji = "🔥";
       text = `Серия — <b>${st} ${plural(st, "день", "дня", "дней")} подряд</b>! Сыграешь сегодня — будет ${st + 1}`;
@@ -331,9 +397,8 @@ function renderToday() {
       emoji = "🎹";
       text = `Вчера занимался — сыграй сегодня, и <b>начнётся серия</b>`;
     } else {
-      emoji = "🎹";
-      // стабильная в течение дня, но новая каждый день
       const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
+      emoji = "🎹";
       text = NUDGES[seed % NUDGES.length];
     }
   }
@@ -345,122 +410,71 @@ function renderToday() {
     </div>`;
 }
 
-function renderTabs() {
-  const hobbies = data.hobbies.filter(h => !h.deleted);
-  const nav = $("#hobbyTabs");
-
-  // Пока хобби одно — переключатель ни к чему
-  if (hobbies.length < 2) { nav.innerHTML = ""; nav.style.display = "none"; return; }
-  nav.style.display = "";
-
-  nav.innerHTML = hobbies.map(h => `
-    <button class="htab ${h.id === cfg.activeHobby ? "on" : ""}" data-id="${h.id}" type="button">
-      <span>${esc(h.emoji)}</span><span>${esc(h.name)}</span>
-    </button>
-  `).join("");
-
-  document.querySelectorAll(".htab[data-id]").forEach(b =>
-    b.addEventListener("click", () => switchHobby(b.dataset.id)));
-}
-
-function renderLevel() {
-  const hobby = activeHobby();
-  const block = $("#levelBlock");
-  if (!hobby) { block.innerHTML = ""; return; }
-
-  const total = totalXp(hobby.id);
-
-  if (!hobby.leveled) {
-    const cnt = hobbySessions(hobby.id).length;
-    block.innerHTML = `
-      <div class="card">
-        <h3>Всего</h3>
-        <div class="stats-row">
-          <div class="stat"><b>${cnt}</b><span>${plural(cnt, "занятие", "занятия", "занятий")}</span></div>
-          <div class="stat"><b>${streak(hobby.id)}</b><span>${plural(streak(hobby.id), "день подряд", "дня подряд", "дней подряд")}</span></div>
-          <div class="stat"><b>${fmtXp(total)}</b><span>опыта</span></div>
-        </div>
-      </div>`;
-    return;
-  }
-
-  const li = levelInfo(total);
-  const pct = Math.round(li.progress * 100);
-
-  block.innerHTML = `
-    <div class="level-card">
-      <div class="level-top">
-        <div class="level-badge"><b>${li.cur.n}</b><span>уровень</span></div>
-        <div class="level-title">
-          <div class="lname">«${esc(li.cur.name)}»</div>
-          <div class="ldesc">${esc(li.cur.desc)}</div>
-        </div>
-      </div>
-      <div class="xp-wrap">
-        <div class="xp-bar"><div class="xp-fill" id="xpFill"></div></div>
-        <div class="xp-nums">
-          <span><b>${fmtXp(li.xp)}</b> набрано</span>
-          <span>${li.next ? `до ${fmtXp(li.next.xp)} · <b>${pct}%</b>` : "максимум!"}</span>
-        </div>
-      </div>
-      ${li.next ? (() => {
-        const left = Math.ceil((li.next.xp - li.xp) / XP_PER_SESSION);
-        return `
-        <div class="level-next">
-          До уровня ${li.next.n} «${esc(li.next.name)}» — <b>${left} ${plural(left, "занятие", "занятия", "занятий")}</b> · занятие = +${XP_PER_SESSION} XP
-        </div>`;
-      })() : ""}
-      <button class="ladder-toggle" id="ladderBtn" type="button">Вся лестница уровней ›</button>
-      <div class="ladder" id="ladder">
-        ${PIANO_LEVELS.map(l => {
-          const state = l.n < li.cur.n ? "done" : l.n === li.cur.n ? "now" : "";
-          return `
-            <div class="lrow ${state}">
-              <span class="ln">${l.n < li.cur.n ? "✓" : l.n}</span>
-              <span class="lt">«${esc(l.name)}»</span>
-              <span class="lh">от ${fmtXp(l.xp)}</span>
-              <span class="ld">${esc(l.desc)}</span>
-            </div>`;
-        }).join("")}
-      </div>
-    </div>`;
-
-  requestAnimationFrame(() => { $("#xpFill").style.width = (li.progress * 100).toFixed(1) + "%"; });
-
-  $("#ladderBtn").addEventListener("click", () => {
-    const open = $("#ladder").classList.toggle("open");
-    $("#ladderBtn").textContent = open ? "Свернуть лестницу ‹" : "Вся лестница уровней ›";
-  });
-}
-
 function renderLog() {
   $("#logDay").textContent = fmtDay(selectedDate);
 
-  const hobby = activeHobby();
-  const marked = hobby && hobbySessions(hobby.id).some(s => s.date === selectedDate);
+  const marked = !!entryFor(selectedDate);
+  const bars = data.piece.bars;
+  const p = progress();
+
+  $("#steppers").innerHTML = marked ? "" : `
+    <div class="stepper-row">
+      <span class="st-label">𝄞 Правая<br><i>до какого такта</i></span>
+      <div class="stepper">
+        <button class="st-btn" data-hand="r" data-d="-1" type="button">−</button>
+        <button class="st-val" data-hand="r" type="button">${selRight}</button>
+        <button class="st-btn" data-hand="r" data-d="1" type="button">＋</button>
+      </div>
+      <span class="st-delta">${selRight > p.right ? "+" + (selRight - p.right) : ""}</span>
+    </div>
+    <div class="stepper-row">
+      <span class="st-label">𝄢 Левая<br><i>до какого такта</i></span>
+      <div class="stepper">
+        <button class="st-btn" data-hand="l" data-d="-1" type="button">−</button>
+        <button class="st-val" data-hand="l" type="button">${selLeft}</button>
+        <button class="st-btn" data-hand="l" data-d="1" type="button">＋</button>
+      </div>
+      <span class="st-delta">${selLeft > p.left ? "+" + (selLeft - p.left) : ""}</span>
+    </div>`;
+
   const btn = $("#logBtn");
-  btn.classList.toggle("off", !!marked);
+  btn.classList.toggle("off", marked);
   btn.innerHTML = marked
     ? `<span class="log-emoji">✅</span><span>${selectedDate === todayStr() ? "Сегодня отмечено" : "День отмечен"}</span>`
-    : `<span class="log-emoji">🎹</span><span>Позанимался!</span><span class="log-xp">+${XP_PER_SESSION} XP</span>`;
+    : `<span class="log-emoji">🎹</span><span>Позанимался!</span>`;
+  $("#noteRow").style.display = marked ? "none" : "";
+
+  document.querySelectorAll(".st-btn").forEach(b =>
+    b.addEventListener("click", () => {
+      const d = Number(b.dataset.d);
+      if (b.dataset.hand === "r") selRight = Math.min(bars, Math.max(0, selRight + d));
+      else selLeft = Math.min(bars, Math.max(0, selLeft + d));
+      renderLog();
+    }));
+
+  document.querySelectorAll(".st-val").forEach(b =>
+    b.addEventListener("click", () => {
+      const hand = b.dataset.hand === "r" ? "правой" : "левой";
+      const v = prompt(`До какого такта разобрал ${hand} рукой?`, b.textContent);
+      if (v === null) return;
+      const n = Math.round(Number(v.replace(",", ".")));
+      if (isNaN(n) || n < 0 || n > bars) { toast(`Число от 0 до ${bars}`); return; }
+      if (b.dataset.hand === "r") selRight = n; else selLeft = n;
+      renderLog();
+    }));
 }
 
 function renderWeek() {
-  const hobby = activeHobby();
-  if (!hobby) return;
-  const w = weekStats(hobby.id);
-  const st = streak(hobby.id);
+  const w = weekStats();
+  const st = streak();
   $("#weekStats").innerHTML = `
     <div class="stat"><b>${w.count}</b><span>${plural(w.count, "день", "дня", "дней")} на этой неделе</span></div>
-    <div class="stat"><b>+${w.xp}</b><span>XP за неделю</span></div>
+    <div class="stat"><b>+${w.bars}</b><span>${plural(w.bars, "такт", "такта", "тактов")} за неделю</span></div>
     <div class="stat"><b>${st}</b><span>${plural(st, "день подряд", "дня подряд", "дней подряд")}</span></div>`;
 }
 
 function renderCalendar() {
-  const hobby = activeHobby();
-  if (!hobby) return;
-
-  const byDate = countByDate(hobby.id);
+  const marked = new Set(entries().map(e => e.date));
   const first = new Date(calYear, calMonth, 1);
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const lead = (first.getDay() + 6) % 7;
@@ -475,41 +489,45 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = dateStr(new Date(calYear, calMonth, d));
     let cls = "day";
-    if (byDate[ds]) cls += " l3";
+    if (marked.has(ds)) cls += " l3";
     if (ds === today) cls += " today";
     if (ds === selectedDate) cls += " sel";
     if (ds > today) cls += " future";
-    html += `<div class="${cls}" data-date="${ds}" title="${byDate[ds] ? "занимался" : ""}">${d}</div>`;
+    html += `<div class="${cls}" data-date="${ds}">${d}</div>`;
   }
   $("#calGrid").innerHTML = html;
 
   document.querySelectorAll(".day[data-date]").forEach(el =>
     el.addEventListener("click", () => {
-      if (el.dataset.date > today) { toast("Это ещё в будущем 🙂"); return; }
+      if (el.dataset.date > todayStr()) { toast("Это ещё в будущем 🙂"); return; }
       selectedDate = el.dataset.date;
       render();
     }));
 }
 
 function renderDay() {
-  const hobby = activeHobby();
-  if (!hobby) return;
-  const list = hobbySessions(hobby.id)
-    .filter(s => s.date === selectedDate)
-    .sort((a, b) => a.createdAt - b.createdAt);
+  const e = entryFor(selectedDate);
+  $("#dayTitle").textContent = "Запись · " + fmtDay(selectedDate);
 
-  $("#dayTitle").textContent = "Записи · " + fmtDay(selectedDate);
-  $("#dayList").innerHTML = list.length
-    ? list.map(s => `
-        <div class="sess">
-          <span class="smin">+${XP_PER_SESSION} XP</span>
-          <span class="snote">${s.note ? esc(s.note) : "занимался"}</span>
-          <button class="sdel" data-id="${s.id}" type="button" aria-label="Удалить">✕</button>
-        </div>`).join("")
-    : `<div class="empty">В этот день записей нет — жми «Позанимался», чтобы отметить</div>`;
+  if (!e) {
+    $("#dayList").innerHTML = `<div class="empty">Этот день не отмечен — жми «Позанимался», чтобы записать</div>`;
+    return;
+  }
+
+  const parts = [];
+  if (e.right) parts.push(`𝄞 до ${e.right}-го`);
+  if (e.left) parts.push(`𝄢 до ${e.left}-го`);
+  const what = parts.length ? parts.join(" · ") : "повторение";
+
+  $("#dayList").innerHTML = `
+    <div class="sess">
+      <span class="smin">${what}</span>
+      <span class="snote">${e.note ? esc(e.note) : "занимался"}</span>
+      <button class="sdel" data-id="${e.id}" type="button" aria-label="Удалить">✕</button>
+    </div>`;
 
   document.querySelectorAll(".sdel").forEach(b =>
-    b.addEventListener("click", () => deleteSession(b.dataset.id)));
+    b.addEventListener("click", () => deleteEntry(b.dataset.id)));
 }
 
 /* ══════════════ Настройки ══════════════ */
@@ -532,7 +550,7 @@ function openSettings() {
     <button class="btn danger" id="setOff" type="button">Отключить синхронизацию</button>
   ` : `
     <div class="set-note">
-      Чтобы часы и уровни не потерялись и были на всех устройствах — подключи <b>GitHub Gist</b>.<br><br>
+      Чтобы прогресс не потерялся и был на всех устройствах — подключи <b>GitHub Gist</b>.<br><br>
       1. Открой <a href="https://github.com/settings/tokens/new?description=%D0%9F%D1%80%D0%BE%D0%BA%D0%B0%D1%87%D0%BA%D0%B0&scopes=gist" target="_blank" rel="noopener">github.com/settings/tokens/new</a><br>
       2. Тип — <b>classic</b>, галочка только <b>gist</b>, срок — No expiration<br>
       3. Generate token → скопируй <b>ghp_…</b> и вставь сюда:
@@ -604,7 +622,7 @@ async function connectGitHub(token) {
 }
 
 function exportData() {
-  return { v: 1, savedAt: now(), hobbies: data.hobbies, sessions: data.sessions };
+  return { v: 2, savedAt: now(), piece: data.piece, entries: data.entries };
 }
 
 // Слияние по id: побеждает более свежий updatedAt
@@ -629,21 +647,23 @@ async function syncNow(manual) {
     const g = await r.json();
     const f = g.files && g.files[GIST_FILE];
 
-    let remote = { hobbies: [], sessions: [] };
+    let remote = { piece: null, entries: [] };
     if (f) {
       let txt = f.content;
       if (f.truncated && f.raw_url) txt = await (await fetch(f.raw_url)).text();
-      try { remote = JSON.parse(txt) || remote; } catch {}
+      try { remote = migrate(JSON.parse(txt)); } catch {}
     }
 
-    const localJson = JSON.stringify(exportData().hobbies) + JSON.stringify(exportData().sessions);
-    data.hobbies = mergeLists(data.hobbies, remote.hobbies);
-    data.sessions = mergeLists(data.sessions, remote.sessions);
+    const localJson = JSON.stringify(data.piece) + JSON.stringify(data.entries);
+    data.entries = mergeLists(data.entries, remote.entries);
+    if (remote.piece && (remote.piece.updatedAt || 0) > (data.piece.updatedAt || 0)) {
+      data.piece = remote.piece;
+    }
     cleanTombstones();
     saveData();
 
-    const mergedJson = JSON.stringify(data.hobbies) + JSON.stringify(data.sessions);
-    const remoteJson = JSON.stringify(remote.hobbies || []) + JSON.stringify(remote.sessions || []);
+    const mergedJson = JSON.stringify(data.piece) + JSON.stringify(data.entries);
+    const remoteJson = JSON.stringify(remote.piece) + JSON.stringify(remote.entries || []);
 
     if (mergedJson !== remoteJson) {
       const pr = await gh("/gists/" + cfg.gistId, {
@@ -655,7 +675,7 @@ async function syncNow(manual) {
 
     cfg.lastSync = now(); saveCfg();
     setSyncDot("ok");
-    if (mergedJson !== localJson) render();
+    if (mergedJson !== localJson) { syncSteppers(); render(); }
     if (manual) toast("Синхронизировано");
   } catch (e) {
     setSyncDot("err");
@@ -665,11 +685,9 @@ async function syncNow(manual) {
   }
 }
 
-// Надгробия старше 60 дней вычищаем совсем
 function cleanTombstones() {
   const limit = now() - 60 * 864e5;
-  data.sessions = data.sessions.filter(s => !s.deleted || (s.updatedAt || 0) > limit);
-  data.hobbies = data.hobbies.filter(h => !h.deleted || (h.updatedAt || 0) > limit);
+  data.entries = data.entries.filter(e => !e.deleted || (e.updatedAt || 0) > limit);
 }
 
 function schedulePush() {
@@ -685,9 +703,10 @@ function init() {
   const t = new Date();
   calYear = t.getFullYear();
   calMonth = t.getMonth();
+  syncSteppers();
 
   $("#gearBtn").addEventListener("click", openSettings);
-  $("#logBtn").addEventListener("click", addSession);
+  $("#logBtn").addEventListener("click", saveDay);
   $("#setClose").addEventListener("click", () => $("#settings").close());
   $("#calPrev").addEventListener("click", () => {
     calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
