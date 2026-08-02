@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0b14">
+  <title>Прокачка</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d0b14;
+      --card: #17141f;
+      --card-2: #1e1a2a;
+      --line: rgba(255, 255, 255, 0.07);
+      --ink: #f2eefb;
+      --muted: #8f89a3;
+      --gold: #ffc94d;
+      --gold-2: #ff9d3f;
+      --violet: #8b7cf6;
+      --green: #4ade80;
+      --red: #f87171;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body { margin: 0; }
+
+    body {
+      min-height: 100vh;
+      font-family: ui-rounded, -apple-system, "SF Pro Rounded", system-ui, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(900px 500px at 80% -10%, rgba(139, 124, 246, 0.14), transparent 60%),
+        radial-gradient(700px 400px at 0% 10%, rgba(255, 157, 63, 0.08), transparent 55%),
+        var(--bg);
+      color: var(--ink);
+    }
+
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; background: none; padding: 0; }
+
+    .app {
+      width: min(560px, 100%);
+      margin: 0 auto;
+      padding: max(14px, env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom));
+      display: grid;
+      gap: 14px;
+    }
+
+    /* ── Шапка ─────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 2px;
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      margin-right: auto;
+    }
+
+    .logo em {
+      font-style: normal;
+      background: linear-gradient(120deg, var(--gold), var(--gold-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .sync-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #4b4661;
+      transition: background 0.3s;
+    }
+    .sync-dot.ok { background: var(--green); }
+    .sync-dot.busy { background: var(--gold); animation: pulse 1s infinite; }
+    .sync-dot.err { background: var(--red); }
+
+    @keyframes pulse { 50% { opacity: 0.35; } }
+
+    .gear {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 1.05rem;
+    }
+
+    /* ── Переключатель хобби ───────────── */
+    .hobby-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px;
+      margin: -2px;
+    }
+    .hobby-tabs::-webkit-scrollbar { display: none; }
+
+    .htab {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 42px;
+      padding: 0 15px;
+      border-radius: 21px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .htab.on {
+      color: var(--ink);
+      border-color: rgba(255, 201, 77, 0.55);
+      background: linear-gradient(180deg, rgba(255, 201, 77, 0.14), rgba(255, 201, 77, 0.05));
+    }
+
+    /* ── Карточки ──────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .card h3 {
+      margin: 0 0 12px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--muted);
+    }
+
+    /* ── Карточка уровня ───────────────── */
+    .level-card {
+      background:
+        radial-gradient(420px 220px at 90% -20%, rgba(255, 201, 77, 0.16), transparent 65%),
+        linear-gradient(180deg, #201b2e, #17141f);
+      border: 1px solid rgba(255, 201, 77, 0.22);
+      border-radius: var(--radius);
+      padding: 18px 16px 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .level-top {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .level-badge {
+      width: 64px;
+      height: 64px;
+      flex: 0 0 auto;
+      border-radius: 18px;
+      background: linear-gradient(140deg, var(--gold), var(--gold-2));
+      color: #241a05;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 22px rgba(255, 175, 60, 0.35);
+    }
+    .level-badge b { font-size: 1.7rem; line-height: 1; font-weight: 850; }
+    .level-badge span { font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
+
+    .level-title { min-width: 0; }
+    .level-title .lname { font-size: 1.32rem; font-weight: 800; line-height: 1.15; }
+    .level-title .ldesc { color: var(--muted); font-size: 0.86rem; line-height: 1.35; margin-top: 3px; }
+
+    .xp-wrap { display: grid; gap: 7px; }
+
+    .xp-bar {
+      height: 14px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.07);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .xp-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: 7px;
+      background: linear-gradient(90deg, var(--gold), var(--gold-2));
+      box-shadow: 0 0 14px rgba(255, 190, 70, 0.55);
+      transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .xp-nums {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .xp-nums b { color: var(--ink); font-weight: 750; }
+
+    .level-next {
+      font-size: 0.82rem;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding-top: 11px;
+    }
+    .level-next b { color: var(--gold); }
+
+    /* ── Лестница уровней ──────────────── */
+    .ladder-toggle {
+      margin-top: 2px;
+      font-size: 0.82rem;
+      color: var(--violet);
+      font-weight: 650;
+      justify-self: start;
+    }
+
+    .ladder { display: none; gap: 0; margin-top: 4px; }
+    .ladder.open { display: grid; }
+
+    .lrow {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 2px;
+      border-top: 1px solid var(--line);
+      font-size: 0.86rem;
+    }
+    .lrow .ln {
+      width: 28px; height: 28px;
+      border-radius: 9px;
+      display: grid; place-items: center;
+      font-weight: 800; font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--muted);
+    }
+    .lrow.done .ln { background: rgba(74, 222, 128, 0.16); color: var(--green); }
+    .lrow.now .ln { background: linear-gradient(140deg, var(--gold), var(--gold-2)); color: #241a05; }
+    .lrow.now .lt { color: var(--gold); font-weight: 750; }
+    .lrow .lh { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+    .lrow .ld { grid-column: 2 / -1; color: var(--muted); font-size: 0.78rem; margin-top: -3px; }
+
+    /* ── Быстрая отметка ───────────────── */
+    .log-date {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .log-date .ld-label {
+      font-size: 0.82rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.09em;
+      color: var(--muted);
+    }
+    .log-date .ld-day { font-size: 0.88rem; color: var(--gold); font-weight: 700; }
+
+    .log-btn {
+      width: 100%;
+      min-height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(140deg, var(--gold), var(--gold-2));
+      color: #241a05;
+      font-size: 1.15rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 6px 24px rgba(255, 175, 60, 0.3);
+      transition: transform 0.1s;
+    }
+    .log-btn:active { transform: scale(0.97); }
+    .log-emoji { font-size: 1.4rem; }
+    .log-xp {
+      font-size: 0.82rem;
+      font-weight: 800;
+      background: rgba(36, 26, 5, 0.16);
+      border-radius: 10px;
+      padding: 4px 9px;
+    }
+
+    .note-row { margin-top: 10px; }
+
+    .note-input {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 12px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      padding: 0 13px;
+      outline: none;
+      color: var(--ink);
+    }
+    .note-input::placeholder { color: #5d5872; }
+    .note-input:focus { border-color: rgba(139, 124, 246, 0.6); }
+
+    /* ── Статистика недели ─────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .stat {
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 11px 12px;
+      display: grid;
+      gap: 2px;
+    }
+    .stat b { font-size: 1.25rem; font-weight: 800; }
+    .stat span { font-size: 0.72rem; color: var(--muted); line-height: 1.2; }
+
+    /* ── Календарь ─────────────────────── */
+    .cal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .cal-title { font-weight: 750; text-transform: capitalize; }
+    .cal-nav { display: flex; gap: 6px; }
+    .cal-nav button {
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+
+    .dow {
+      text-align: center;
+      font-size: 0.68rem;
+      color: #5d5872;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding-bottom: 3px;
+    }
+
+    .day {
+      aspect-ratio: 1;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      font-size: 0.86rem;
+      font-weight: 650;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+      position: relative;
+    }
+    .day.blank { background: none; }
+    .day.l1 { background: rgba(255, 201, 77, 0.16); color: var(--ink); }
+    .day.l2 { background: rgba(255, 201, 77, 0.34); color: var(--ink); }
+    .day.l3 { background: rgba(255, 179, 60, 0.55); color: #241a05; font-weight: 800; }
+    .day.today { border-color: rgba(139, 124, 246, 0.8); }
+    .day.sel { outline: 2px solid var(--gold); outline-offset: -1px; }
+    .day.future { opacity: 0.35; }
+
+    /* ── Записи дня ────────────────────── */
+    .sessions { display: grid; gap: 8px; }
+
+    .sess {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 11px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      padding: 10px 12px;
+    }
+    .sess .smin {
+      font-weight: 800;
+      color: var(--gold);
+      font-size: 0.94rem;
+      white-space: nowrap;
+    }
+    .sess .snote { color: var(--muted); font-size: 0.88rem; overflow-wrap: anywhere; }
+    .sess .sdel {
+      color: #5d5872;
+      font-size: 1.05rem;
+      width: 32px; height: 32px;
+      border-radius: 9px;
+    }
+    .sess .sdel:active { color: var(--red); }
+
+    .empty {
+      color: #5d5872;
+      font-size: 0.88rem;
+      text-align: center;
+      padding: 6px 0 2px;
+    }
+
+    /* ── Модалка настроек ──────────────── */
+    dialog {
+      width: min(480px, calc(100% - 28px));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--card);
+      color: var(--ink);
+      padding: 18px;
+    }
+    dialog::backdrop { background: rgba(5, 4, 10, 0.7); backdrop-filter: blur(4px); }
+
+    .set-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .set-head b { font-size: 1.1rem; }
+    .set-close { color: var(--muted); font-size: 1.3rem; width: 36px; height: 36px; }
+
+    .set-body { display: grid; gap: 12px; }
+
+    .set-note {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.45;
+      background: var(--card-2);
+      border-radius: 12px;
+      padding: 11px 13px;
+    }
+    .set-note a { color: var(--violet); }
+    .set-note b { color: var(--ink); }
+
+    .btn {
+      min-height: 48px;
+      border-radius: 13px;
+      background: var(--card-2);
+      border: 1px solid var(--line);
+      font-weight: 700;
+      padding: 0 16px;
+    }
+    .btn.gold {
+      background: linear-gradient(140deg, var(--gold), var(--gold-2));
+      border: 0;
+      color: #241a05;
+    }
+    .btn.danger { color: var(--red); }
+
+    /* ── Тост и плюшка XP ──────────────── */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      transform: translateX(-50%) translateY(12px);
+      background: #262135;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      padding: 11px 17px;
+      font-size: 0.9rem;
+      font-weight: 650;
+      opacity: 0;
+      pointer-events: none;
+      transition: 0.18s;
+      z-index: 30;
+      max-width: calc(100% - 28px);
+      text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .xp-pop {
+      position: fixed;
+      left: 50%;
+      top: 34%;
+      transform: translateX(-50%);
+      font-size: 2rem;
+      font-weight: 850;
+      color: var(--gold);
+      text-shadow: 0 4px 24px rgba(255, 190, 70, 0.6);
+      pointer-events: none;
+      opacity: 0;
+      z-index: 30;
+    }
+    .xp-pop.go { animation: xpfly 1.1s ease-out forwards; }
+    @keyframes xpfly {
+      0% { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.8); }
+      18% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.06); }
+      70% { opacity: 1; }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-44px) scale(1); }
+    }
+
+    .lvlup {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(5, 4, 10, 0.82);
+      backdrop-filter: blur(6px);
+      z-index: 40;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .lvlup.show { opacity: 1; pointer-events: auto; }
+    .lvlup-card {
+      text-align: center;
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+      padding: 20px;
+    }
+    .lvlup-badge {
+      width: 110px; height: 110px;
+      border-radius: 30px;
+      background: linear-gradient(140deg, var(--gold), var(--gold-2));
+      color: #241a05;
+      display: grid; place-items: center;
+      box-shadow: 0 10px 50px rgba(255, 180, 60, 0.5);
+      animation: bump 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .lvlup-badge b { font-size: 3rem; font-weight: 850; line-height: 1; }
+    .lvlup-badge span { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+    @keyframes bump { 0% { transform: scale(0.3); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    .lvlup h2 { margin: 6px 0 0; font-size: 1.6rem; }
+    .lvlup p { margin: 0; color: var(--muted); max-width: 300px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="logo">Про<em>качка</em></div>
+      <div class="sync-dot" id="syncDot" title="Синхронизация"></div>
+      <button class="gear" id="gearBtn" aria-label="Настройки">⚙️</button>
+    </header>
+
+    <nav class="hobby-tabs" id="hobbyTabs"></nav>
+
+    <section id="levelBlock"></section>
+
+    <section class="card">
+      <div class="log-date">
+        <span class="ld-label">Отметить занятие</span>
+        <span class="ld-day" id="logDay"></span>
+      </div>
+      <button class="log-btn" id="logBtn" type="button">
+        <span class="log-emoji">🎹</span>
+        <span>Позанимался!</span>
+        <span class="log-xp">+10 XP</span>
+      </button>
+      <div class="note-row">
+        <input class="note-input" id="noteInput" type="text" maxlength="80"
+               placeholder="Что разбирал? (необязательно)" autocomplete="off">
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Эта неделя</h3>
+      <div class="stats-row" id="weekStats"></div>
+    </section>
+
+    <section class="card">
+      <div class="cal-head">
+        <div class="cal-title" id="calTitle"></div>
+        <div class="cal-nav">
+          <button id="calPrev" aria-label="Прошлый месяц">‹</button>
+          <button id="calNext" aria-label="Следующий месяц">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+
+    <section class="card">
+      <h3 id="dayTitle">Записи</h3>
+      <div class="sessions" id="dayList"></div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <div class="set-head">
+      <b>Настройки</b>
+      <button class="set-close" id="setClose">✕</button>
+    </div>
+    <div class="set-body" id="setBody"></div>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+  <div class="xp-pop" id="xpPop"></div>
+
+  <div class="lvlup" id="lvlup">
+    <div class="lvlup-card">
+      <div class="lvlup-badge"><b id="lvlupNum">2</b><span>уровень</span></div>
+      <h2 id="lvlupName"></h2>
+      <p id="lvlupDesc"></p>
+      <button class="btn gold" id="lvlupOk">Красота!</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
