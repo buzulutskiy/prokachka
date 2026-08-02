@@ -598,11 +598,16 @@ function renderLog() {
   const box = $("#logBox");
 
   if (marked && !addMode) {
-    box.innerHTML = `
-      <div class="marked-note">
-        <span>✅ ${selectedDate === todayStr() ? "Сегодня уже отмечено" : "Этот день отмечен"}</span>
-        <button id="addMore" type="button">＋ дополнить</button>
-      </div>`;
+    const empty = !(entryFor(selectedDate).spans || []).length;
+    box.innerHTML = empty
+      ? `<div class="marked-note need">
+           <span>📝 День отмечен, но такты не указаны</span>
+           <button id="addMore" type="button">＋ указать такты</button>
+         </div>`
+      : `<div class="marked-note">
+           <span>✅ ${selectedDate === todayStr() ? "Сегодня уже отмечено" : "Этот день отмечен"}</span>
+           <button id="addMore" type="button">＋ дополнить</button>
+         </div>`;
     $("#noteRow").style.display = "none";
     $("#addMore").addEventListener("click", () => { addMode = true; renderLog(); });
   } else {
@@ -691,6 +696,7 @@ function renderWeek() {
 
 function renderCalendar() {
   const marked = new Set(entries().map(e => e.date));
+  const noBars = new Set(entries().filter(e => !(e.spans || []).length).map(e => e.date));
   const first = new Date(calYear, calMonth, 1);
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const lead = (first.getDay() + 6) % 7;
@@ -705,11 +711,12 @@ function renderCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = dateStr(new Date(calYear, calMonth, d));
     let cls = "day";
-    if (marked.has(ds)) cls += " l3";
+    if (marked.has(ds)) cls += noBars.has(ds) ? " nobars" : " l3";
     if (ds === today) cls += " today";
     if (ds === selectedDate) cls += " sel";
     if (ds > today) cls += " future";
-    html += `<div class="${cls}" data-date="${ds}">${d}</div>`;
+    const tip = noBars.has(ds) ? "Отмечен, но такты не указаны" : marked.has(ds) ? "Занимался" : "";
+    html += `<div class="${cls}" data-date="${ds}" title="${tip}">${d}</div>`;
   }
   $("#calGrid").innerHTML = html;
 
@@ -729,16 +736,24 @@ function renderDay() {
     return;
   }
 
-  const what = (e.spans || []).length ? e.spans.map(spanText).join(" · ") : "занимался";
+  const hasSpans = (e.spans || []).length > 0;
   $("#dayList").innerHTML = `
     <div class="sess">
-      <span class="smin">${what}</span>
+      <span class="smin">${hasSpans ? e.spans.map(spanText).join(" · ") : "занимался"}</span>
       <span class="snote">${e.note ? esc(e.note) : ""}</span>
       <button class="sdel" data-id="${e.id}" type="button" aria-label="Удалить">✕</button>
-    </div>`;
+    </div>
+    ${hasSpans ? "" : `<button class="add-span" id="fillBars" type="button">＋ Указать, какие такты разбирал в этот день</button>`}`;
 
   document.querySelectorAll(".sdel").forEach(b =>
     b.addEventListener("click", () => deleteEntry(b.dataset.id)));
+
+  const fill = $("#fillBars");
+  if (fill) fill.addEventListener("click", () => {
+    addMode = true;
+    renderLog();
+    $("#logBox").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
 }
 
 /* ══════════════ Настройки ══════════════ */
