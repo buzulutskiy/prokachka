@@ -308,6 +308,14 @@
       transition: transform 0.1s;
     }
     .log-btn:active { transform: scale(0.97); }
+    .log-btn.off {
+      background: var(--card-2);
+      color: var(--muted);
+      box-shadow: none;
+      border: 1px solid var(--line);
+      cursor: default;
+    }
+    .log-btn.off:active { transform: none; }
     .log-emoji { font-size: 1.4rem; }
     .log-xp {
       font-size: 0.82rem;

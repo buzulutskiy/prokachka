@@ -218,6 +218,12 @@ function addSession() {
   const hobby = activeHobby();
   if (!hobby) return;
 
+  // один день — одно занятие
+  if (hobbySessions(hobby.id).some(s => s.date === selectedDate)) {
+    toast(selectedDate === todayStr() ? "Сегодня уже отмечено — возвращайся завтра!" : "Этот день уже отмечен");
+    return;
+  }
+
   const before = totalXp(hobby.id);
   data.sessions.push({
     id: uid(),
@@ -251,13 +257,10 @@ function addSession() {
 
 // Экран «молодец, возвращайся завтра» после сегодняшней отметки
 function showDone(hobby) {
-  const todayCnt = hobbySessions(hobby.id).filter(s => s.date === todayStr()).length;
   const st = streak(hobby.id);
 
-  $("#doneEmoji").textContent = todayCnt >= 2 ? "🔥" : "🎉";
-  $("#doneTitle").textContent = todayCnt >= 2
-    ? `${todayCnt}-е занятие за день!`
-    : DONE_TITLES[Math.floor(Math.random() * DONE_TITLES.length)];
+  $("#doneEmoji").textContent = st >= 2 ? "🔥" : "🎉";
+  $("#doneTitle").textContent = DONE_TITLES[Math.floor(Math.random() * DONE_TITLES.length)];
 
   let text = "+" + XP_PER_SESSION + " XP в копилку. ";
   if (st >= 2) text += `Серия — ${st} ${plural(st, "день", "дня", "дней")} подряд. Возвращайся завтра, будет ${st + 1} 🔥`;
@@ -305,16 +308,14 @@ function renderToday() {
   const block = $("#todayBlock");
   if (!hobby) { block.innerHTML = ""; return; }
 
-  const todayCnt = hobbySessions(hobby.id).filter(s => s.date === todayStr()).length;
+  const doneToday = hobbySessions(hobby.id).some(s => s.date === todayStr());
   const st = streak(hobby.id);
   let cls, emoji, text;
 
-  if (todayCnt > 0) {
+  if (doneToday) {
     cls = "done";
-    emoji = todayCnt >= 2 ? "🔥" : "✅";
-    text = todayCnt >= 2
-      ? `Сегодня уже <b>${todayCnt} ${plural(todayCnt, "занятие", "занятия", "занятий")}</b> — жгёшь! Возвращайся завтра`
-      : `На сегодня — всё, молодец! Возвращайся завтра — серия станет <b>${st + 1} ${plural(st + 1, "день", "дня", "дней")}</b>`;
+    emoji = "✅";
+    text = `На сегодня — всё, молодец! Возвращайся завтра — серия станет <b>${st + 1} ${plural(st + 1, "день", "дня", "дней")}</b>`;
   } else {
     cls = "call";
     const li = hobby.leveled ? levelInfo(totalXp(hobby.id)) : null;
@@ -434,6 +435,14 @@ function renderLevel() {
 
 function renderLog() {
   $("#logDay").textContent = fmtDay(selectedDate);
+
+  const hobby = activeHobby();
+  const marked = hobby && hobbySessions(hobby.id).some(s => s.date === selectedDate);
+  const btn = $("#logBtn");
+  btn.classList.toggle("off", !!marked);
+  btn.innerHTML = marked
+    ? `<span class="log-emoji">✅</span><span>${selectedDate === todayStr() ? "Сегодня отмечено" : "День отмечен"}</span>`
+    : `<span class="log-emoji">🎹</span><span>Позанимался!</span><span class="log-xp">+${XP_PER_SESSION} XP</span>`;
 }
 
 function renderWeek() {
@@ -465,13 +474,12 @@ function renderCalendar() {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = dateStr(new Date(calYear, calMonth, d));
-    const cnt = byDate[ds] || 0;
     let cls = "day";
-    if (cnt > 0) cls += cnt >= 2 ? " l3" : " l2";
+    if (byDate[ds]) cls += " l3";
     if (ds === today) cls += " today";
     if (ds === selectedDate) cls += " sel";
     if (ds > today) cls += " future";
-    html += `<div class="${cls}" data-date="${ds}" title="${cnt ? cnt + " " + plural(cnt, "занятие", "занятия", "занятий") : ""}">${d}</div>`;
+    html += `<div class="${cls}" data-date="${ds}" title="${byDate[ds] ? "занимался" : ""}">${d}</div>`;
   }
   $("#calGrid").innerHTML = html;
 
