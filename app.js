@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 18";
+const APP_VERSION = "2026.08.03 · 19";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1084,17 +1084,10 @@ function renderHome() {
       ? `${s.done} из ${s.lessons} уроков · ${s.minutes} мин пройдено`
       : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`;
 
-  const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
-  const list = isBook() ? NUDGES_BOOK : isPastel() ? NUDGES_PASTEL : NUDGES_PIANO;
   const freeze = activeFreeze();
-  let nudge;
-  if (freeze) nudge = `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится, можно спокойно отдыхать`;
-  else if (!gistReady()) nudge = `Записи включатся после подключения <b>GitHub Gist</b> — так прогресс не потеряется`;
-  else if (g.done) nudge = `🎯 Цель недели закрыта: <b>${g.days} из ${g.goal}</b>. Всё сверху — в удовольствие`;
-  else if (doneToday) nudge = `Сегодня отмечено. До цели недели — ещё <b>${g.left} ${plural(g.left, "день", "дня", "дней")}</b>`;
-  else if (st >= 2) nudge = `Серия <b>${st} ${plural(st, "день", "дня", "дней")}</b> — не разрывай её сегодня`;
-  else if (st === 1) nudge = `Вчера занимался — сделай сегодня, и <b>серия пойдёт</b>`;
-  else nudge = list[seed % list.length];
+  const nudge = freeze
+    ? `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится`
+    : "";
 
   $("#view").innerHTML = `
     <div class="hero">
@@ -1212,12 +1205,10 @@ function updateHeroInfo() {
 
   const nudge = $(".nudge");
   if (nudge) {
-    const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
-    nudge.innerHTML = doneToday
-      ? `Сегодня отмечено. Возвращайся завтра — серия станет <b>${st + 1}</b>`
-      : st >= 2 ? `Серия <b>${st} ${plural(st, "день", "дня", "дней")}</b> — не разрывай её сегодня`
-      : st === 1 ? `Вчера занимался — сделай сегодня, и <b>серия пойдёт</b>`
-      : NUDGES_PIANO[seed % NUDGES_PIANO.length];
+    const freeze = activeFreeze();
+    nudge.innerHTML = freeze
+      ? `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится`
+      : "";
   }
 }
 
