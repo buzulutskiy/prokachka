@@ -186,7 +186,7 @@
       display: grid; place-content: center; justify-items: center; gap: 2px;
     }
     .sum-cap { font-size: 0.76rem; color: var(--muted); font-weight: 700; }
-    .sum-txt b { font-size: 3rem; font-weight: 850; line-height: 1; letter-spacing: -0.04em; }
+    .sum-txt b { font-size: 3rem; font-weight: 850; line-height: 1; letter-spacing: -0.04em; color: #6de3a2; }
     .sum-sub { font-size: 0.8rem; color: var(--dim); }
 
     .sum-chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; width: 100%; }
@@ -506,6 +506,7 @@
       display: grid; justify-items: center; gap: 1px;
     }
     .ring-txt b {
+      color: #6de3a2;
       font-size: clamp(1.35rem, 3.4vh, 1.72rem);
       font-weight: 850; line-height: 1;
       letter-spacing: -0.03em;
@@ -609,9 +610,9 @@
     }
     .bar { height: 18px; border-radius: 2px; background: rgba(255,255,255,0.07); }
     .bar.tick { margin-right: 2px; }
-    .bar.l1.r { background: rgba(255, 201, 77, 0.32); }
-    .bar.l2.r { background: rgba(255, 201, 77, 0.62); }
-    .bar.l3.r { background: linear-gradient(180deg, var(--gold), var(--gold-2)); }
+    .bar.l1.r { background: rgba(74, 222, 128, 0.28); }
+    .bar.l2.r { background: rgba(74, 222, 128, 0.55); }
+    .bar.l3.r { background: linear-gradient(180deg, #5ee79b, #31c47a); }
     .bar.l1.l { background: rgba(139, 124, 246, 0.32); }
     .bar.l2.l { background: rgba(139, 124, 246, 0.62); }
     .bar.l3.l { background: linear-gradient(180deg, #a99cf9, var(--violet)); }
@@ -627,8 +628,8 @@
     .pages-bar { position: relative; height: 20px; border-radius: 8px; background: rgba(255,255,255,0.06); overflow: hidden; }
     .pages-fill {
       position: absolute; inset: 0 auto 0 0; border-radius: 8px;
-      background: linear-gradient(90deg, var(--gold), var(--gold-2));
-      box-shadow: 0 0 16px rgba(255, 190, 70, 0.4);
+      background: linear-gradient(90deg, #5ee79b, #31c47a);
+      box-shadow: 0 0 16px rgba(74, 222, 128, 0.35);
     }
 
     .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -679,7 +680,7 @@
     .ach-count b { font-size: 1.7rem; font-weight: 850; }
     .ach-count span { color: var(--muted); font-size: 0.9rem; }
     .ach-progress { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; }
-    .ach-progress i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-2)); }
+    .ach-progress i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #5ee79b, #31c47a); }
 
     .ach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 
@@ -697,7 +698,7 @@
     .mc-body { display: grid; gap: 7px; min-width: 0; }
     .mc-title { font-size: 0.94rem; font-weight: 700; line-height: 1.2; }
     .mc-bar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
-    .mc-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--gold), var(--gold-2)); }
+    .mc-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #5ee79b, #31c47a); }
     .mc-num { font-size: 1.05rem; font-weight: 850; color: var(--gold); white-space: nowrap; }
     .mc-num i { font-style: normal; font-size: 0.78rem; color: var(--dim); font-weight: 700; }
 
@@ -1085,8 +1086,8 @@
   <svg width="0" height="0" style="position:absolute">
     <defs>
       <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#ffc94d"/>
-        <stop offset="100%" stop-color="#ff9d3f"/>
+        <stop offset="0%" stop-color="#5ee79b"/>
+        <stop offset="100%" stop-color="#31c47a"/>
       </linearGradient>
     </defs>
   </svg>

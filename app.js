@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 15";
+const APP_VERSION = "2026.08.03 · 16";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1043,10 +1043,7 @@ function coverRailHTML() {
   const activeIdx = isPiano() ? Math.max(0, live.findIndex(p => p.id === data.piano.activePiece)) : 0;
   const slides = list.map((p, i) =>
     `<div class="slot ${i === activeIdx ? "on" : ""}" data-i="${i}">${coverHTML(p)}</div>`).join("");
-  const dots = list.length > 1
-    ? `<div class="dots">${list.map((_, i) => `<i class="${i === activeIdx ? "on" : ""}"></i>`).join("")}</div>`
-    : "";
-  return `<div class="rail" id="rail">${slides}</div>${dots}`;
+  return `<div class="rail" id="rail">${slides}</div>`;
 }
 
 function ringHTML(pct) {
@@ -1096,11 +1093,6 @@ function renderHome() {
         <h2>${isBook() ? esc(data.book.book.title) : isPastel() ? esc(course().name) : esc(piece().name)}</h2>
         <p>${sub}</p>
       </div>
-      <div class="chips">
-        <span class="chip ${g.done ? "goal-done" : ""}" title="Общая цель на неделю">🎯 <b>${g.days}</b>/${g.goal} за нед.</span>
-        <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")}</span>
-        <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b>/${ach.length} наград</button>
-      </div>
       <button class="cta ${!gistReady() ? "locked" : doneToday ? "done" : ""}" id="ctaBtn" type="button">
         ${!gistReady()
           ? "🔒 Подключить синхронизацию"
@@ -1117,12 +1109,6 @@ function renderHome() {
     openLogSheet();
   });
 
-  $("#achChip").addEventListener("click", () => {
-    achView = { track: data.active, pieceId: isPiano() ? piece().id : null };
-    cfg.achView = achView;
-    tab = "ach"; cfg.tab = tab; saveCfg();
-    render();
-  });
   setupRail();
 }
 
@@ -1205,20 +1191,6 @@ function updateHeroInfo() {
     <h2>${esc(piece().name)}</h2>
     <p>𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%</p>`;
 
-  const chipBox = $(".chips");
-  if (chipBox) {
-    const g = goalProgress();
-    chipBox.innerHTML = `
-      <span class="chip ${g.done ? "goal-done" : ""}">🎯 <b>${g.days}</b>/${g.goal} за нед.</span>
-      <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")}</span>
-      <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b>/${ach.length} наград</button>`;
-    $("#achChip").addEventListener("click", () => {
-      achView = { track: data.active, pieceId: isPiano() ? piece().id : null };
-      cfg.achView = achView;
-      tab = "ach"; cfg.tab = tab; saveCfg();
-      render();
-    });
-  }
 
   const cta = $("#ctaBtn");
   if (cta) {
@@ -1226,11 +1198,6 @@ function updateHeroInfo() {
     cta.textContent = doneToday ? "✅ Сегодня отмечено · дополнить" : "🎹 Отметить занятие";
   }
 
-  const dots = $(".dots");
-  if (dots) {
-    const idx = data.piano.pieces.filter(p => !p.archived).findIndex(p => p.id === data.piano.activePiece);
-    [...dots.children].forEach((d, i) => d.classList.toggle("on", i === idx));
-  }
 
   const nudge = $(".nudge");
   if (nudge) {
@@ -1360,16 +1327,16 @@ function lineChartHTML(points) {
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         <defs>
           <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="rgba(255,201,77,0.35)"/>
-            <stop offset="100%" stop-color="rgba(255,201,77,0)"/>
+            <stop offset="0%" stop-color="rgba(94,231,155,0.32)"/>
+            <stop offset="100%" stop-color="rgba(94,231,155,0)"/>
           </linearGradient>
         </defs>
         <line x1="${padX}" y1="${bottom + 2}" x2="${W - padX}" y2="${bottom + 2}" stroke="rgba(255,255,255,0.08)"/>
         <path d="${area}" fill="url(#lineFill)"/>
-        <path d="${path}" fill="none" stroke="#ffc94d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${path}" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         ${pts.map((p, i) => (i % dotEvery === 0 || p.today) ? `
           <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.today ? 5 : 3.5}"
-            fill="${p.value ? "#ffc94d" : "#2a2438"}" stroke="${p.today ? "#fff" : "#ffc94d"}" stroke-width="${p.today ? 2 : 1.4}"
+            fill="${p.value ? "#4ade80" : "#2a2438"}" stroke="${p.today ? "#fff" : "#4ade80"}" stroke-width="${p.today ? 2 : 1.4}"
             opacity="${p.future ? 0.35 : 1}"/>` : "").join("")}
       </svg>
       <div class="wl-days" style="grid-template-columns: repeat(${n}, 1fr)">
