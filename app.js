@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 25";
+const APP_VERSION = "2026.08.03 · 26";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -57,6 +57,7 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
+let achTab = "ach";          // вкладка внутри материала: достижения / знания
 let tab = "home";                 // home | progress | ach | overview
 let calYear, calMonth;
 let selectedDate = todayStr();
@@ -1133,12 +1134,11 @@ function syncTabHeight() {
 }
 
 function renderTabbar() {
-  const ach = achState();
-  const openCount = ach.filter(a => a.done).length;
+  const openCount = achMaterials().reduce((n, m) => n + m.open, 0);
   $("#tabbar").innerHTML = [
     ["home", "◉", "Главная"],
     ["progress", "▤", "Прогресс"],
-    ["ach", "✦", `Награды ${openCount}`]
+    ["ach", "✦", `Достижения ${openCount}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
   syncTabHeight();
@@ -1883,19 +1883,22 @@ function achMaterials() {
 
   for (const p of data.piano.pieces.filter(x => !x.archived)) {
     data.active = "piano"; data.piano.activePiece = p.id;
-    const list = achState();
-    out.push({ track: "piano", pieceId: p.id, icon: "🎹", title: p.name,
-      open: list.filter(a => a.done).length, total: list.length });
+    const list = achState(); let f = factsState();
+    out.push({ track: "piano", pieceId: p.id, icon: "🎹", title: p.name, sub: p.author,
+      open: list.filter(a => a.done).length, total: list.length,
+      fOpen: f.filter(x => x.open).length, fTotal: f.length });
   }
   data.active = "book";
-  let list = achState();
-  out.push({ track: "book", icon: "📖", title: data.book.book.title,
-    open: list.filter(a => a.done).length, total: list.length });
+  let list = achState(); let f = factsState();
+  out.push({ track: "book", icon: "📖", title: data.book.book.title, sub: data.book.book.author,
+    open: list.filter(a => a.done).length, total: list.length,
+    fOpen: f.filter(x => x.open).length, fTotal: f.length });
 
   data.active = "pastel";
-  list = achState();
-  out.push({ track: "pastel", icon: "🎨", title: course().name,
-    open: list.filter(a => a.done).length, total: list.length });
+  list = achState(); f = factsState();
+  out.push({ track: "pastel", icon: "🎨", title: course().name, sub: course().author,
+    open: list.filter(a => a.done).length, total: list.length,
+    fOpen: f.filter(x => x.open).length, fTotal: f.length });
 
   data.active = save; data.piano.activePiece = savePiece;
   return out;
@@ -1913,6 +1916,7 @@ function withMaterial(view, fn) {
 
 function renderAch() {
   if (!achView) { renderAchList(); return; }
+  if (achTab !== "facts") achTab = "ach";
   renderAchMaterial(achView);
 }
 
@@ -1921,22 +1925,27 @@ function renderAchList() {
   const mats = achMaterials();
   const totalOpen = mats.reduce((a, m) => a + m.open, 0);
   const totalAll = mats.reduce((a, m) => a + m.total, 0);
+  const factsOpen = mats.reduce((a, m) => a + m.fOpen, 0);
+  const factsAll = mats.reduce((a, m) => a + m.fTotal, 0);
 
   $("#view").innerHTML = `
     <div class="ach-top">
-      <div class="ach-count"><b>${totalOpen}</b><span>из ${totalAll} наград открыто</span></div>
+      <div class="ach-count"><b>${totalOpen}</b><span>из ${totalAll} достижений открыто</span></div>
       <div class="ach-progress"><i style="width:${totalAll ? totalOpen / totalAll * 100 : 0}%"></i></div>
+      <div class="ach-sub">💡 и ${factsOpen} из ${factsAll} ${plural(factsAll, "карточки знаний", "карточек знаний", "карточек знаний")}</div>
     </div>
 
     <div class="mat-list">
       ${mats.map(m => `
         <button class="mat-card" data-track="${m.track}" data-piece="${m.pieceId || ""}" type="button">
-          <span class="mc-ic">${m.icon}</span>
+          <span class="mc-tile t-${m.track}"><i>${m.icon}</i></span>
           <span class="mc-body">
             <span class="mc-title">${esc(m.title)}</span>
+            ${m.sub ? `<span class="mc-sub">${esc(m.sub)}</span>` : ""}
             <span class="mc-bar"><i style="width:${m.total ? m.open / m.total * 100 : 0}%"></i></span>
+            <span class="mc-tags"><em>✦ ${m.open}/${m.total}</em><em>💡 ${m.fOpen}/${m.fTotal}</em></span>
           </span>
-          <span class="mc-num">${m.open}<i>/${m.total}</i></span>
+          <span class="mc-go">›</span>
         </button>`).join("")}
     </div>`;
 
@@ -1952,23 +1961,22 @@ function renderAchList() {
 // карточки знаний по материалу
 function factsBlockHTML(view) {
   const list = withMaterial(view, () => factsState());
-  if (!list.length) return "";
-  const open = list.filter(f => f.open).length;
+  if (!list.length) return `<div class="empty-note">Для этого материала карточек пока нет</div>`;
+  const days = withMaterial(view, () => curStats()).days;
+  const next = list.find(f => !f.open);
 
   return `
-    <div class="facts">
-      <div class="facts-head">💡 <b>Знания</b> · ${open} из ${list.length}</div>
-      <div class="facts-list">
-        ${list.map(f => f.open
-          ? `<button class="fact open" data-fact="${esc(f.id)}" type="button">
-               <span class="ft">${esc(f.t)}</span>
-               <span class="fx">${esc(f.x.slice(0, 64))}…</span>
-             </button>`
-          : `<div class="fact locked">
-               <span class="ft">🔒 Ещё не открыта</span>
-               <span class="fx">Откроется после ${f.need} ${plural(f.need, "занятия", "занятий", "занятий")} с этим материалом</span>
-             </div>`).join("")}
-      </div>
+    ${next ? `<div class="facts-note">Занятий с материалом: <b>${days}</b>. Следующая карточка — после <b>${next.need}</b>.</div>` : ""}
+    <div class="facts-grid">
+      ${list.map(f => f.open
+        ? `<button class="fcard open" data-fact="${esc(f.id)}" type="button">
+             <span class="fi">💡</span>
+             <span class="ft">${esc(f.t)}</span>
+           </button>`
+        : `<div class="fcard locked">
+             <span class="fi">🔒</span>
+             <span class="ft">После ${f.need} ${plural(f.need, "занятия", "занятий", "занятий")}</span>
+           </div>`).join("")}
     </div>`;
 }
 
@@ -1980,20 +1988,32 @@ function renderAchMaterial(view) {
   const icon = view.track === "book" ? "📖" : view.track === "pastel" ? "🎨" : "🎹";
   const open = ach.filter(a => a.done).length;
   const next = ach.find(a => !a.done && !a.secret);
+  const facts = withMaterial(view, () => factsState());
   let teased = 0;
 
   $("#view").innerHTML = `
     <button class="back" id="achBack" type="button">‹ Все материалы</button>
 
     <div class="ach-top">
-      <div class="ach-title">${icon} ${esc(title)}</div>
-      <div class="ach-count"><b>${open}</b><span>из ${ach.length} наград открыто</span></div>
-      <div class="ach-progress"><i style="width:${open / ach.length * 100}%"></i></div>
-      ${next ? `<div style="font-size:0.86rem;color:var(--muted)">Ближайшее: ${next.icon} <b style="color:var(--ink)">${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
+      <div class="ach-hero">
+        <span class="mc-tile big t-${view.track}"><i>${icon}</i></span>
+        <span class="ach-hero-txt">
+          <b>${esc(title)}</b>
+          <em>${achTab === "facts" ? `${facts.filter(f => f.open).length} из ${facts.length} карточек знаний` : `${open} из ${ach.length} достижений открыто`}</em>
+        </span>
+      </div>
+      <div class="ach-progress"><i style="width:${achTab === "facts"
+        ? (facts.length ? facts.filter(f => f.open).length / facts.length * 100 : 0)
+        : open / ach.length * 100}%"></i></div>
+      ${achTab === "ach" && next ? `<div class="ach-sub">Ближайшее: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
     </div>
 
-    ${factsBlockHTML(view)}
+    <div class="seg" id="achTabs">
+      <button data-at="ach" class="${achTab === "ach" ? "on" : ""}" type="button">✦ Достижения</button>
+      <button data-at="facts" class="${achTab === "facts" ? "on" : ""}" type="button">💡 Знания</button>
+    </div>
 
+    ${achTab === "facts" ? factsBlockHTML(view) : `
     <div class="ach-grid">
       ${ach.map(a => {
         if (a.done) return `
@@ -2008,7 +2028,14 @@ function renderAchMaterial(view) {
             <span class="nm">${tease ? esc(a.name) : "???"}</span>
           </button>`;
       }).join("")}
-    </div>`;
+    </div>`}`;
+
+  document.querySelectorAll("#achTabs button").forEach(b =>
+    b.addEventListener("click", () => {
+      achTab = b.dataset.at; cfg.achTab = achTab; saveCfg();
+      renderAch();
+      $("#view").scrollTop = 0;
+    }));
 
   $("#achBack").addEventListener("click", () => {
     achView = null; cfg.achView = null; saveCfg();
@@ -2022,7 +2049,6 @@ function renderAchMaterial(view) {
       openAchSheet(a, b.classList.contains("next"), words);
     }));
 
-  const facts = withMaterial(view, () => factsState());
   document.querySelectorAll("[data-fact]").forEach(b =>
     b.addEventListener("click", () => {
       const f = facts.find(x => x.id === b.dataset.fact);
@@ -2652,6 +2678,7 @@ function init() {
   if (["home", "progress", "ach"].includes(cfg.tab)) tab = cfg.tab;
   if (["week", "month"].includes(cfg.period)) period = cfg.period;
   if (cfg.achView && cfg.achView.track) achView = cfg.achView;
+  if (cfg.achTab === "facts") achTab = "facts";
   const t = new Date();
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();
