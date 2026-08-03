@@ -777,6 +777,14 @@ function renderOverview() {
     </div>`;
 }
 
+// высота закреплённого таббара — чтобы контент точно не заезжал под него
+function syncTabHeight() {
+  const bar = document.querySelector(".tabbar");
+  if (!bar) return;
+  const h = Math.ceil(bar.getBoundingClientRect().height);
+  if (h) document.documentElement.style.setProperty("--tab-h", h + "px");
+}
+
 function renderTabbar() {
   const ach = achState();
   const openCount = ach.filter(a => a.done).length;
@@ -787,6 +795,8 @@ function renderTabbar() {
     ["overview", "◈", "Обзор"]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
+  syncTabHeight();
+  requestAnimationFrame(syncTabHeight);
   document.querySelectorAll("#tabbar button").forEach(b =>
     b.addEventListener("click", () => {
       tab = b.dataset.tab;
@@ -1678,6 +1688,9 @@ function init() {
   $("#sheetBg").addEventListener("click", closeSheet);
   $("#cheerOk").addEventListener("click", () => $("#cheer").classList.remove("show"));
   $("#cheer").addEventListener("click", e => { if (e.target === e.currentTarget) $("#cheer").classList.remove("show"); });
+
+  window.addEventListener("resize", syncTabHeight);
+  window.addEventListener("orientationchange", () => setTimeout(syncTabHeight, 200));
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { if (selectedDate > todayStr()) selectedDate = todayStr(); syncNow(false); render(); }

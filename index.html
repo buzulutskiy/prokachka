@@ -55,7 +55,7 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      padding: max(12px, env(safe-area-inset-top)) 16px 0;
+      padding: max(12px, env(safe-area-inset-top)) 16px var(--tab-h, 72px);
     }
 
     /* область контента: главная — без скролла, остальные — со своим скроллом */
@@ -418,14 +418,16 @@
 
     /* ══════════ Нижняя навигация ══════════ */
     .tabbar {
-      flex-shrink: 0;
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
       width: min(460px, 100%);
-      margin: 0 auto;
       display: grid; grid-template-columns: repeat(4, 1fr);
-      background: rgba(20, 17, 28, 0.92);
+      background: rgba(20, 17, 28, 0.94);
       backdrop-filter: blur(14px);
       border-top: 1px solid var(--line);
-      padding: 7px 10px max(7px, calc(env(safe-area-inset-bottom) - 14px));
+      padding: 7px 10px max(8px, calc(env(safe-area-inset-bottom) - 12px));
       z-index: 20;
     }
     .tabbar button {
