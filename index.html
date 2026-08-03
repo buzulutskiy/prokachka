@@ -578,6 +578,19 @@
       border-left: 1px solid var(--line);
     }
 
+    .logo { cursor: pointer; }
+
+    .shake-hint:empty { display: none; }
+    .shake-hint button {
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-height: 32px;
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 1px dashed var(--line);
+    }
+    .shake-hint button:active { color: var(--ink); border-color: rgba(255,201,77,0.5); }
+
     .nudge:empty { display: none; }
     .nudge {
       text-align: center;
