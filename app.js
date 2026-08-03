@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 28";
+const APP_VERSION = "2026.08.03 · 29";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -38,7 +38,7 @@ const DEFAULT_BOOKS = [
     volume: "том 1",
     pages: 361,
     startPage: 183,
-    art: "snow", tone: "sea",
+    art: "snow", tone: "snow",
     chapters: [
       { name: "Феномен изображения", from: 6 },
       { name: "Цапля и журавль", from: 125 },
@@ -1922,6 +1922,42 @@ function coverOf(item) {
     </div>`;
 }
 
+/* ── Подложка под цвет обложки ── */
+// два пятна света на каждый тон: то же семейство цветов, что и у обложек
+const TONES = {
+  violet: ["139, 124, 246", "255, 157, 63"],
+  sea:    ["86, 160, 214", "120, 214, 196"],
+  snow:   ["132, 156, 204", "170, 190, 224"],
+  wine:   ["214, 96, 116", "255, 170, 90"],
+  forest: ["86, 190, 140", "72, 150, 186"],
+  pastel: ["230, 140, 180", "255, 201, 77"]
+};
+
+function toneOf(item) {
+  if (!item) return "violet";
+  if (item.track === "pastel") return "pastel";
+  if (item.track === "book") return (item.book || book()).tone || "sea";
+  return (item.piece || piece()).tone || "violet";
+}
+
+let bgLayer = 0;
+function paintBackdrop(item) {
+  const layers = document.querySelectorAll(".bgfx i");
+  if (layers.length < 2) return;
+  const [c1, c2] = TONES[toneOf(item)] || TONES.violet;
+  const css =
+    `radial-gradient(980px 560px at 78% -12%, rgba(${c1}, 0.32), transparent 62%),` +
+    `radial-gradient(760px 460px at -6% 4%, rgba(${c2}, 0.18), transparent 58%),` +
+    `radial-gradient(760px 420px at 52% 110%, rgba(${c1}, 0.16), transparent 60%)`;
+
+  if (layers[bgLayer].style.backgroundImage === css) return;   // тот же тон — не трогаем
+  const next = layers[bgLayer ^ 1];
+  next.style.backgroundImage = css;
+  next.classList.add("on");
+  layers[bgLayer].classList.remove("on");
+  bgLayer ^= 1;
+}
+
 const RAIL_COPIES = 5;   // копии ленты для бесшовного цикла
 const RAIL_MID = 2;      // рабочая копия — центральная
 
@@ -1997,6 +2033,7 @@ function renderHome() {
     openLogSheet();
   });
 
+  paintBackdrop(railItems()[activeRailIndex(railItems())]);
   setupRail();
   renderShakeHint();
 }
@@ -2055,6 +2092,7 @@ function setupRail() {
     if (spinning) return;
     const pos = normalize(nearestPos());
     slots.forEach((el, i) => el.classList.toggle("on", i === pos));
+    paintBackdrop(items[pos % n]);
     setActiveMaterial(items[pos % n]);
   };
 
@@ -2079,6 +2117,7 @@ function setupRail() {
     clearTimeout(idleTimer);
     rail.scrollTo({ left: targetFor(pos), behavior: smooth ? "smooth" : "auto" });
     slots.forEach((el, i) => el.classList.toggle("on", i === pos));
+    paintBackdrop(items[pos % n]);
     setActiveMaterial(items[pos % n]);
   };
 
@@ -2140,7 +2179,10 @@ function setupRail() {
   centerOn(activeRailIndex(items) + RAIL_MID * n, false);
   if (n < 2) return;
 
-  rail.addEventListener("scroll", settleWhenIdle, { passive: true });
+  rail.addEventListener("scroll", () => {
+    paintBackdrop(items[nearestPos() % n]);   // фон догоняет обложку прямо в движении
+    settleWhenIdle();
+  }, { passive: true });
   if ("onscrollend" in rail) rail.addEventListener("scrollend", () => { if (!spinning) settle(); });
 
   slots.forEach((el, i) => el.addEventListener("click", () => {
@@ -2159,6 +2201,7 @@ function setActiveMaterial(item) {
   data.active = item.track;
   if (item.pieceId) data.piano.activePiece = item.pieceId;
   if (item.bookId) data.book.activeBook = item.bookId;
+  paintBackdrop(item);
   pending = []; pickLessons = [];
   selectedDate = todayStr();
   syncPickers();
