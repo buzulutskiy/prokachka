@@ -825,6 +825,7 @@
     /* ══════════ Шторка отметки ══════════ */
     .sheet-bg {
       position: fixed; inset: 0;
+      transition: opacity 0.22s;
       background: rgba(5, 4, 10, 0.72);
       backdrop-filter: blur(4px);
       opacity: 0; pointer-events: none;
@@ -843,11 +844,22 @@
       border-top: 1px solid var(--line);
       padding: 8px 16px max(20px, calc(env(safe-area-inset-bottom) + 6px));
       transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      overscroll-behavior: contain;
       z-index: 31;
       max-height: 92vh; overflow-y: auto;
     }
     .sheet.show { transform: translateX(-50%) translateY(0); }
-    .grabber { width: 40px; height: 4px; border-radius: 2px; background: #3a3550; margin: 4px auto 14px; }
+    /* зона захвата: тянешь её — уезжает вся шторка */
+    .grab-zone {
+      position: sticky; top: 0; z-index: 2;
+      margin: -8px -16px 6px;
+      padding: 10px 16px 8px;
+      background: #191521;
+      cursor: grab;
+      touch-action: none;
+    }
+    .grab-zone:active { cursor: grabbing; }
+    .grabber { width: 44px; height: 5px; border-radius: 3px; background: #3a3550; margin: 0 auto; }
 
     .sheet h3 { margin: 0 0 4px; font-size: 1.15rem; }
     .sheet .sub { margin: 0 0 16px; color: var(--muted); font-size: 0.86rem; }

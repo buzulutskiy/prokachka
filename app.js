@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 24";
+const APP_VERSION = "2026.08.03 · 25";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2088,12 +2088,66 @@ function openAchSheet(a, teased, words) {
 /* ══════════ Шторка ══════════ */
 
 function openSheet(html) {
-  $("#sheet").innerHTML = `<div class="grabber"></div>` + html;
-  $("#sheet").classList.add("show");
+  const sheet = $("#sheet");
+  sheet.innerHTML = `<div class="grab-zone"><div class="grabber"></div></div>` + html;
+  sheet.classList.add("show");
   $("#sheetBg").classList.add("show");
+  sheet.scrollTop = 0;
+  setupSheetDrag(sheet);
+}
+
+// шторку можно утянуть вниз: за полоску — всегда, за содержимое — когда оно уже прокручено наверх
+function setupSheetDrag(sheet) {
+  let startY = 0, dy = 0, dragging = false, fromGrab = false;
+
+  const onDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    fromGrab = !!e.target.closest(".grab-zone");
+    if (!fromGrab && sheet.scrollTop > 0) return;   // внутри прокрутки — не мешаем
+    dragging = true; startY = e.clientY; dy = 0;
+    sheet.style.transition = "none";
+  };
+
+  const onMove = (e) => {
+    if (!dragging) return;
+    dy = e.clientY - startY;
+    if (dy < 0) {                                    // тянут вверх — отдаём прокрутке
+      if (!fromGrab) { reset(); return; }
+      dy = 0;
+    }
+    if (dy > 0) {
+      e.preventDefault();
+      sheet.style.transform = `translateX(-50%) translateY(${dy}px)`;
+      $("#sheetBg").style.opacity = String(Math.max(0, 1 - dy / 420));
+    }
+  };
+
+  const reset = () => {
+    dragging = false;
+    sheet.style.transition = "";
+    sheet.style.transform = "";
+    $("#sheetBg").style.opacity = "";
+  };
+
+  const onUp = () => {
+    if (!dragging) return;
+    const far = dy > 110;
+    reset();
+    if (far) closeSheet();
+  };
+
+  sheet.addEventListener("pointerdown", onDown);
+  sheet.addEventListener("pointermove", onMove, { passive: false });
+  sheet.addEventListener("pointerup", onUp);
+  sheet.addEventListener("pointercancel", onUp);
+  sheet.addEventListener("pointerleave", onUp);
 }
 function closeSheet() {
-  $("#sheet").classList.remove("show");
+  const sheet = $("#sheet");
+  sheet.style.transition = "";
+  sheet.style.transform = "";
+  $("#sheetBg").style.opacity = "";
+  sheet.classList.remove("show");
   $("#sheetBg").classList.remove("show");
   sheetMode = null;
 }
