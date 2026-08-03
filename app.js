@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 19";
+const APP_VERSION = "2026.08.03 · 20";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -587,6 +587,7 @@ function saveEntry() {
   if (!gistReady()) { closeSheet(); openSettingsSheet(); return; }
   const existing = entryFor(selectedDate);
   const beforeDone = new Set(achState().filter(a => a.done).map(a => a.id));
+  const beforeFacts = new Set(factsState().filter(f => f.open).map(f => f.id));
   const before = curStats();
   const note = ($("#noteInput") && $("#noteInput").value.trim()) || "";
 
@@ -611,10 +612,33 @@ function saveEntry() {
 
   const after = curStats();
   const fresh = achState().filter(a => a.done && !beforeDone.has(a.id));
+  const freshFacts = factsState().filter(f => f.open && !beforeFacts.has(f.id));
   render();
 
-  if (fresh.length) { showCheer(fresh[fresh.length - 1], fresh.length); return; }
+  overlayQueue = [];
+  if (fresh.length) overlayQueue.push({ type: "ach", a: fresh[fresh.length - 1], count: fresh.length });
+  freshFacts.forEach(f => overlayQueue.push({ type: "fact", f }));
+
+  if (overlayQueue.length) { showNextOverlay(); return; }
   showDone(before, after, !!existing);
+}
+
+let overlayQueue = [];
+
+function showNextOverlay() {
+  const item = overlayQueue.shift();
+  if (!item) return;
+  if (item.type === "ach") showCheer(item.a, item.count);
+  else showFact(item.f);
+}
+
+// карточка знания — тот же праздничный оверлей
+function showFact(f) {
+  $("#cheerIc").textContent = "💡";
+  $("#cheerTitle").textContent = f.t;
+  $("#cheerText").textContent = f.x;
+  $("#cheerOk").textContent = overlayQueue.length ? "Дальше" : "Интересно!";
+  $("#cheer").classList.add("show", "fact");
 }
 
 function showCheer(a, count) {
@@ -622,6 +646,8 @@ function showCheer(a, count) {
   $("#cheerTitle").textContent = a.name;
   $("#cheerText").textContent = wordOf(a) +
     (count > 1 ? ` · и ещё ${count - 1} ${plural(count - 1, "достижение", "достижения", "достижений")} открыто!` : "");
+  $("#cheerOk").textContent = overlayQueue.length ? "Дальше" : "Красота!";
+  $("#cheer").classList.remove("fact");
   $("#cheer").classList.add("show");
 }
 
@@ -1660,6 +1686,29 @@ function renderAchList() {
     }));
 }
 
+// карточки знаний по материалу
+function factsBlockHTML(view) {
+  const list = withMaterial(view, () => factsState());
+  if (!list.length) return "";
+  const open = list.filter(f => f.open).length;
+
+  return `
+    <div class="facts">
+      <div class="facts-head">💡 <b>Знания</b> · ${open} из ${list.length}</div>
+      <div class="facts-list">
+        ${list.map(f => f.open
+          ? `<button class="fact open" data-fact="${esc(f.id)}" type="button">
+               <span class="ft">${esc(f.t)}</span>
+               <span class="fx">${esc(f.x.slice(0, 64))}…</span>
+             </button>`
+          : `<div class="fact locked">
+               <span class="ft">🔒 Ещё не открыта</span>
+               <span class="fx">Откроется после ${f.need} ${plural(f.need, "занятия", "занятий", "занятий")} с этим материалом</span>
+             </div>`).join("")}
+      </div>
+    </div>`;
+}
+
 // награды конкретного материала
 function renderAchMaterial(view) {
   const ach = withMaterial(view, () => achState());
@@ -1679,6 +1728,8 @@ function renderAchMaterial(view) {
       <div class="ach-progress"><i style="width:${open / ach.length * 100}%"></i></div>
       ${next ? `<div style="font-size:0.86rem;color:var(--muted)">Ближайшее: ${next.icon} <b style="color:var(--ink)">${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
     </div>
+
+    ${factsBlockHTML(view)}
 
     <div class="ach-grid">
       ${ach.map(a => {
@@ -1707,6 +1758,28 @@ function renderAchMaterial(view) {
       const a = ach.find(x => x.id === b.dataset.id);
       openAchSheet(a, b.classList.contains("next"), words);
     }));
+
+  const facts = withMaterial(view, () => factsState());
+  document.querySelectorAll("[data-fact]").forEach(b =>
+    b.addEventListener("click", () => {
+      const f = facts.find(x => x.id === b.dataset.fact);
+      if (f) openFactSheet(f);
+    }));
+}
+
+// Шторка с карточкой знания
+function openFactSheet(f) {
+  sheetMode = "fact";
+  openSheet(`
+    <div class="ach-sheet">
+      <div class="big open">💡</div>
+      <h3>${esc(f.t)}</h3>
+      <p style="max-width:340px">${esc(f.x)}</p>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" id="factClose" type="button">Закрыть</button>
+    </div>`);
+  $("#factClose").addEventListener("click", closeSheet);
 }
 
 // Шторка с деталями награды
@@ -2094,6 +2167,71 @@ function weekSummary(offset = 0) {
   return { from, to, days: allDays.size, bars, pages, lessons };
 }
 
+
+/* ══════════ Карточки знаний ══════════
+   Открываются по мере занятий: 1, 3, 6, 10 и 15-й день с этим материалом. */
+
+const FACT_STEPS = [1, 3, 6, 10, 15];
+
+const FACTS = {
+  bwv853: [
+    { t: "Одна музыка, две записи",
+      x: "Прелюдия написана в es-moll — шесть бемолей, а фуга той же пары записана в dis-moll — шесть диезов. На клавиатуре это одни и те же клавиши, но глазами читается совершенно по-разному. Во всём первом томе «Хорошо темперированного клавира» такая пара только одна." },
+    { t: "Сначала была тетрадь для сына",
+      x: "Прелюдия существовала раньше самого сборника: её ранняя версия попала в «Нотную тетрадь Вильгельма Фридемана Баха» — учебную книжку, которую Бах составлял для старшего сына. То, что ты разбираешь, начиналось как домашнее упражнение внутри семьи." },
+    { t: "Фуга-предвестник «Искусства фуги»",
+      x: "Фуга этой пары — трёхголосная и считается одной из самых строго выстроенных во всём томе: Бах пускает тему в каноне и в увеличении, растягивая её вдвое. Те же приёмы он развернёт через двадцать с лишним лет в «Искусстве фуги»." },
+    { t: "Тональность, которой боялись",
+      x: "В барокко тональности с шестью знаками почти не использовали: при старых способах настройки они звучали фальшиво. Первый том ХТК, собранный около 1722 года, и был доказательством, что при хорошей темперации играть можно во всех двадцати четырёх." },
+    { t: "Фуга-переселенец",
+      x: "Исследователи считают, что фугу Бах не сочинил заново, а перенёс из ранней работы в d-moll, подняв на полтона в dis-moll. Для него это была обычная практика: хороший материал переезжал из пьесы в пьесу, меняя тональность и назначение." }
+  ],
+  more: [
+    { t: "Музыка из «До свидания, мальчики!»",
+      x: "«Мальчики и море» — прелюдия из фильма Михаила Калика 1964 года по повести Бориса Балтера. История о трёх выпускниках последнего мирного лета: через несколько месяцев начнётся война, и зритель знает это с первых кадров, а герои — нет." },
+    { t: "Не первая встреча с режиссёром",
+      x: "С Каликом Таривердиев работал и раньше — над картиной «Человек идёт за солнцем» (1961). Режиссёр искал не сопровождение, а второй голос повествования, и композитор писал музыку, которая договаривает то, чего нет в диалогах." },
+    { t: "Сто тридцать семь фильмов",
+      x: "Таривердиев работал в кино около сорока лет, его музыка звучит в 137 картинах. При этом он всю жизнь считал себя прежде всего автором камерной музыки, а не киношным композитором." },
+    { t: "Дебют в двадцать семь",
+      x: "В кинематограф он пришёл в 1958 году с фильмом «Юность наших отцов» — задолго до «Иронии судьбы» и «Семнадцати мгновений весны», которые сделали его имя известным каждому." },
+    { t: "Вторая жизнь на концертной сцене",
+      x: "Сегодня фортепианную музыку Таривердиева играет пианист Алексей Гориболь — во многом благодаря ему эти пьесы вышли из категории «музыка из кино» и звучат в залах как самостоятельный репертуар." }
+  ],
+  book: [
+    { t: "Книга выросла из лекций",
+      x: "«Снег на траве» — не мемуары, а записанные беседы: лекции на Высших курсах сценаристов и режиссёров и в Японии, публиковавшиеся в журнале «Искусство кино» в 1999–2004 годах. Отсюда живая устная интонация — Норштейн будто говорит с тобой, а не пишет." },
+    { t: "Про искусство вообще, а не про мультики",
+      x: "Разговор идёт о том, как вообще рождается художественный образ — через живопись, поэзию, кино, наблюдение за жизнью. Анимация здесь скорее повод: способ разобрать, из чего сделано искусство." },
+    { t: "Туман из стекла и света",
+      x: "«Ёжик в тумане» снят методом перекладки: перед камерой ставилось несколько слоёв стекла, между ними двигались вырезанные фигуры. Знаменитый туман — не компьютер, а тончайшая калька, которую поднимали и опускали, меняя плотность белого." },
+    { t: "Сто эскизов одного ежа",
+      x: "Образ Ёжика рождался мучительно: было больше сотни эскизов, и нужный вариант нашла художница Франческа Ярбусова, жена Норштейна. По его собственным словам, случилось это после криков и сердечных капель." },
+    { t: "Госпремия за три сказки",
+      x: "В 1979 году Норштейн, оператор Александр Жуковский и художница Франческа Ярбусова получили Государственную премию СССР сразу за три фильма: «Лиса и заяц», «Цапля и журавль» и «Ёжик в тумане»." }
+  ],
+  pastel: [
+    { t: "И материал, и техника сразу",
+      x: "Словом «пастель» называют и мелки, и способ работы ими. Разновидностей три: сухая, масляная и восковая — и ведут они себя настолько по-разному, что переход с одной на другую похож на смену инструмента." },
+    { t: "Первая, кто рисовала только пастелью",
+      x: "Розальба Каррьера — венецианская художница XVIII века — первой сделала пастель своим единственным материалом. После её портретов техника вошла в моду по всей Европе: быстрая, лёгкая, идеально передающая кожу и ткань." },
+    { t: "Любимый материал Дега",
+      x: "В XIX веке пастелью работали Делакруа, Милле, Мане, Ренуар, Редон — и особенно Эдгар Дега. Его балерины сделаны именно ей: Дега наслаивал пастель, пропаривал бумагу, растирал пальцами и довёл технику до уровня живописи." },
+    { t: "Почти чистый пигмент",
+      x: "В пастельном мелке связующего минимум — по сути это спрессованный пигмент. Поэтому цвет получается таким плотным и бархатным, а работы, если их не тереть, держат яркость столетиями." },
+    { t: "Чем нельзя фиксировать",
+      x: "Готовый рисунок закрепляют фиксативом, иначе пигмент осыпается. Лак для волос, который часто советуют, для этого не годится: он не бескислотный и со временем желтит и разъедает работу." }
+  ]
+};
+
+// карточки текущего материала: сколько открыто по числу дней занятий
+function factsState() {
+  const key = isBook() ? "book" : isPastel() ? "pastel" : piece().id;
+  const list = FACTS[key] || [];
+  const days = new Set(entries().map(e => e.date)).size;
+  return list.map((f, i) => ({ ...f, id: key + ":" + i, need: FACT_STEPS[i], open: days >= FACT_STEPS[i] }));
+}
+
 /* ── Архив: пройденный материал уходит в историю, дни занятий остаются ── */
 
 function currentMaterial() {
@@ -2452,7 +2590,10 @@ function init() {
   $("#gearBtn").addEventListener("click", openSettingsSheet);
   $("#diceBtn").addEventListener("click", openDiceSheet);
   $("#sheetBg").addEventListener("click", closeSheet);
-  $("#cheerOk").addEventListener("click", () => $("#cheer").classList.remove("show"));
+  $("#cheerOk").addEventListener("click", () => {
+    $("#cheer").classList.remove("show");
+    if (overlayQueue.length) setTimeout(showNextOverlay, 220);
+  });
   $("#cheer").addEventListener("click", e => { if (e.target === e.currentTarget) $("#cheer").classList.remove("show"); });
 
   window.addEventListener("resize", syncTabHeight);
