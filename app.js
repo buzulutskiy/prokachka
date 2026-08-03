@@ -9,6 +9,7 @@ const LS = {
   older: ["prokachka-concept-v1", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
+const APP_VERSION = "2026.08.03 · 7";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1551,19 +1552,36 @@ function rollDice(except) {
   }, 1000);
 }
 
+async function forceUpdate() {
+  toast("Обновляю…");
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch {}
+  location.replace(location.pathname + "?v=" + Date.now());
+}
+
 function openSettingsSheet() {
   sheetMode = "settings";
   const connected = cfg.token && cfg.gistId;
   openSheet(`
     <h3>Настройки</h3>
-    <p class="sub">Концепт-версия · данные хранятся отдельно</p>
+    <p class="sub">Синхронизация и данные приложения</p>
     ${connected ? `
       <div class="info-note">Синхронизация через гист <b>${esc(cfg.gistId)}</b></div>
       <div class="sheet-actions">
         <button class="btn gold" id="sSync" type="button">Синхронизировать</button>
         <button class="btn danger" id="sOff" type="button">Отключить</button>
+        <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
-      </div>` : `
+      </div>
+      <div class="version">Версия ${APP_VERSION}</div>` : `
       <div class="info-note">
         Подключи <b>GitHub Gist</b>, чтобы прогресс жил на всех устройствах.<br>
         Токен: <a href="https://github.com/settings/tokens/new?description=%D0%9F%D1%80%D0%BE%D0%BA%D0%B0%D1%87%D0%BA%D0%B0&scopes=gist" target="_blank" rel="noopener">classic со scope gist</a>
@@ -1571,10 +1589,13 @@ function openSettingsSheet() {
       <input class="note-input" id="sToken" type="password" placeholder="ghp_…" autocomplete="off">
       <div class="sheet-actions">
         <button class="btn gold" id="sConnect" type="button">Подключить</button>
+        <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
-      </div>`}`);
+      </div>
+      <div class="version">Версия ${APP_VERSION}</div>`}`);
 
   $("#sClose").addEventListener("click", closeSheet);
+  $("#sUpdate").addEventListener("click", forceUpdate);
   if (connected) {
     $("#sSync").addEventListener("click", () => { closeSheet(); syncNow(true); });
     $("#sOff").addEventListener("click", () => { cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); closeSheet(); toast("Отключено"); });
@@ -1700,7 +1721,17 @@ function init() {
   if (cfg.token && cfg.gistId) { setSyncDot("ok"); syncNow(false); }
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      reg.update().catch(() => {});
+      reg.addEventListener("updatefound", () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener("statechange", () => {
+          // новая версия готова и старая ещё работает — подхватываем сразу
+          if (sw.state === "installed" && navigator.serviceWorker.controller) location.reload();
+        });
+      });
+    }).catch(() => {});
   }
 }
 

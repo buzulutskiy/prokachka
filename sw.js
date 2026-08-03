@@ -1,4 +1,4 @@
-const CACHE = "prokachka-v2";
+const CACHE = "prokachka-v7";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
