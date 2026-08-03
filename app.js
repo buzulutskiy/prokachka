@@ -4,12 +4,12 @@
    детали разнесены по вкладкам «Прогресс», «Награды» и «Обзор». */
 
 const LS = {
-  data: "prokachka-data-v5",
+  data: "prokachka-data-v6",
   cfg: "prokachka-cfg-v1",
-  older: ["prokachka-concept-v1", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
+  older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 13";
+const APP_VERSION = "2026.08.03 · 15";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -54,7 +54,9 @@ const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ── Состояние ── */
 let data = null;
-let cfg = { token: "", gistId: "", lastSync: 0, tab: "home" };
+let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null };
+let period = "week";   // week | month — что показываем на «Прогрессе»
+let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
 let tab = "home";                 // home | progress | ach | overview
 let calYear, calMonth;
 let selectedDate = todayStr();
@@ -112,8 +114,11 @@ function emptyData() {
   return {
     active: "piano",
     piano: { pieces: DEFAULT_PIECES.map(p => ({ ...p, updatedAt: 0 })), activePiece: DEFAULT_PIECES[0].id, entries: [] },
-    book: { book: { ...DEFAULT_BOOK, updatedAt: 0 }, entries: [] },
-    pastel: { course: { ...DEFAULT_COURSE, updatedAt: 0 }, entries: [] }
+    book: { book: { ...DEFAULT_BOOK, id: "snow-1", updatedAt: 0 }, entries: [] },
+    pastel: { course: { ...DEFAULT_COURSE, updatedAt: 0 }, entries: [] },
+    weekGoal: 4,   // общая цель: сколько дней в неделю заниматься чем угодно
+    freezes: [],   // периоды паузы: отпуск, болезнь — серия их не замечает
+    archive: []    // пройденные материалы
   };
 }
 
@@ -171,6 +176,17 @@ function migrate(obj) {
     base.pastel.entries = obj.pastel.entries || [];
     if (obj.pastel.course) base.pastel.course = Object.assign({}, DEFAULT_COURSE, obj.pastel.course, { lessons: DEFAULT_COURSE.lessons });
   }
+  if (Number(obj.weekGoal) > 0) base.weekGoal = Math.min(7, Math.round(obj.weekGoal));
+  if (Array.isArray(obj.freezes)) base.freezes = obj.freezes;
+  if (Array.isArray(obj.archive)) base.archive = obj.archive;
+
+  // записи книги и курса привязываем к конкретному материалу
+  const bookId = base.book.book.id || "snow-1";
+  base.book.book.id = bookId;
+  base.book.entries = base.book.entries.map(e => ({ ...e, bookId: e.bookId || bookId }));
+  const courseId = base.pastel.course.id || "test-drive";
+  base.pastel.entries = base.pastel.entries.map(e => ({ ...e, courseId: e.courseId || courseId }));
+
   if (["book", "piano", "pastel"].includes(obj.active)) base.active = obj.active;
   return base;
 }
@@ -199,15 +215,34 @@ const course = () => data.pastel.course;
 // записи текущего трека, а для пианино — ещё и текущей композиции
 const entries = () => isPiano()
   ? data.piano.entries.filter(e => !e.deleted && (e.pieceId || "bwv853") === piece().id)
-  : trackOf().entries.filter(e => !e.deleted);
+  : isBook()
+    ? data.book.entries.filter(e => !e.deleted && (e.bookId || data.book.book.id) === data.book.book.id)
+    : data.pastel.entries.filter(e => !e.deleted && (e.courseId || course().id) === course().id);
 const entryFor = d => entries().find(e => e.date === d);
+
+// день попадает в паузу (отпуск) — такие дни серию не рвут
+function isFrozen(ds) {
+  return (data.freezes || []).some(f => !f.deleted && ds >= f.from && ds <= f.to);
+}
+
+function activeFreeze() {
+  const t = todayStr();
+  return (data.freezes || []).find(f => !f.deleted && t >= f.from && t <= f.to) || null;
+}
 
 function streak() {
   const days = new Set(entries().map(e => e.date));
-  let n = 0;
+  let n = 0, skipped = 0;
   const d = new Date();
-  if (!days.has(dateStr(d))) d.setDate(d.getDate() - 1);
-  while (days.has(dateStr(d))) { n++; d.setDate(d.getDate() - 1); }
+  if (!days.has(dateStr(d)) && !isFrozen(dateStr(d))) d.setDate(d.getDate() - 1);
+  while (true) {
+    const ds = dateStr(d);
+    if (days.has(ds)) n++;
+    else if (isFrozen(ds)) skipped++;      // пауза: пропускаем день молча
+    else break;
+    if (n + skipped > 3650) break;
+    d.setDate(d.getDate() - 1);
+  }
   return n;
 }
 function mondayOf(d) { const r = new Date(d); r.setDate(r.getDate() - ((r.getDay() + 6) % 7)); return r; }
@@ -688,11 +723,14 @@ function render() {
   $("#view").className = tab === "home" ? "fixed" : "scrolls";
   if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
-  else if (tab === "overview") renderOverview();
   else renderAch();
 }
 
 function renderSeg() {
+  const box = $("#seg");
+  if (tab === "progress" || tab === "ach") { box.style.display = "none"; box.innerHTML = ""; return; }
+  box.style.display = "";
+
   $("#seg").innerHTML = [["piano", "🎹", "Пианино"], ["book", "📖", "Чтение"], ["pastel", "🎨", "Пастель"]]
     .map(([id, ic, nm]) => `<button data-t="${id}" class="${data.active === id ? "on" : ""}" type="button"><span>${ic}</span>${nm}</button>`).join("");
   document.querySelectorAll("#seg button").forEach(b =>
@@ -707,7 +745,7 @@ function overview() {
   // детализация по материалам (для списка направлений)
   const items = [];
   let pianoDone = 0, pianoTotal = 0;
-  for (const p of data.piano.pieces) {
+  for (const p of data.piano.pieces.filter(x => !x.archived)) {
     data.active = "piano"; data.piano.activePiece = p.id;
     const s = pianoStats();
     pianoDone += s.touchedR + s.touchedL;
@@ -816,6 +854,55 @@ function radarHTML(axes) {
     </svg>`;
 }
 
+function archiveHTML() {
+  const list = (data.archive || []).filter(a => !a.deleted)
+    .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
+  if (!list.length) return "";
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", year: "numeric" });
+
+  return `
+    <div class="panel">
+      <h3>Архив · пройдено ${list.length}</h3>
+      <div class="dirs">
+        ${list.map(a => `
+          <div class="dir">
+            <span class="di">${a.icon}</span>
+            <span class="dn">${esc(a.title)}<i>${a.days} ${plural(a.days, "день", "дня", "дней")} · ${fmt.format(fromStr(a.finishedAt)).replace(" г.", "")}</i></span>
+            <span class="dp done">${a.pct >= 100 ? "✓" : a.pct + "%"}</span>
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
+
+// баланс развития: три оси по накопленным дням занятий
+function balanceHTML() {
+  const o = overview();
+  const sorted = o.axes.slice().sort((x, y) => y.pct - x.pct);
+  const strong = sorted[0], weak = sorted[sorted.length - 1];
+  const note = o.actMax
+    ? `Больше всего занятий — ${strong.icon} <b>${esc(strong.label)}</b> (${strong.days} ${plural(strong.days, "день", "дня", "дней")}), меньше всего ${weak.icon} <b>${esc(weak.label)}</b> (${weak.days})`
+    : "Отметь первое занятие — и график оживёт";
+
+  return `
+    <div class="panel">
+      <h3>Баланс развития</h3>
+      ${radarHTML(o.axes)}
+      <div class="balance-note">${note}</div>
+      <div class="recent">
+        За последний месяц:
+        ${o.axes.map(a => `<span>${a.icon} <b>${o.recent[a.key]}</b></span>`).join("")}
+      </div>
+      <div class="dirs" style="margin-top:14px">
+        ${o.items.map(a => `
+          <div class="dir">
+            <span class="di">${a.icon}</span>
+            <span class="dn">${esc(a.full)}<i>${esc(a.note)}</i></span>
+            <span class="dp ${a.pct >= 100 ? "done" : ""}">${a.pct >= 100 ? "✓" : Math.round(a.pct) + "%"}</span>
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
+
 function renderOverview() {
   const o = overview();
   const sorted = o.axes.slice().sort((x, y) => y.pct - x.pct);
@@ -825,7 +912,21 @@ function renderOverview() {
     ? `Больше всего занятий — ${strong.icon} <b>${esc(strong.label)}</b> (${strong.days} ${plural(strong.days, "день", "дня", "дней")}), меньше всего ${weak.icon} <b>${esc(weak.label)}</b> (${weak.days})`
     : "Отметь первое занятие — и график оживёт";
 
+  const w = weekSummary(0), prev = weekSummary(1);
+  const arrow = (a, b) => a > b ? `<i class="up">▲</i>` : a < b ? `<i class="down">▼</i>` : "";
+  const fmtD = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+
   $("#view").innerHTML = `
+    <div class="panel">
+      <h3>Итоги недели · ${fmtD.format(fromStr(w.from))} — ${fmtD.format(fromStr(w.to))}</h3>
+      <div class="stats">
+        <div class="stat"><b>${w.days}/${goalProgress().goal}</b><span>дней из цели</span></div>
+        <div class="stat"><b>${w.bars} ${arrow(w.bars, prev.bars)}</b><span>${plural(w.bars, "такт", "такта", "тактов")}</span></div>
+        <div class="stat"><b>${w.pages + w.lessons ? `${w.pages}/${w.lessons}` : "0/0"}</b><span>страниц / уроков</span></div>
+      </div>
+      <div class="week-cmp">На прошлой неделе: ${prev.days} ${plural(prev.days, "день", "дня", "дней")}, ${prev.bars} ${plural(prev.bars, "такт", "такта", "тактов")}, ${prev.pages} стр., ${prev.lessons} ${plural(prev.lessons, "урок", "урока", "уроков")}</div>
+    </div>
+
     <div class="panel">
       <h3>Баланс развития</h3>
       ${radarHTML(o.axes)}
@@ -839,6 +940,8 @@ function renderOverview() {
         Шкала относительная: у самого частого хобби — полная.
       </div>
     </div>
+
+    ${archiveHTML()}
 
     <div class="panel">
       <h3>Что сейчас в работе${o.doneCount ? ` · пройдено ${o.doneCount}` : ""}</h3>
@@ -867,8 +970,7 @@ function renderTabbar() {
   $("#tabbar").innerHTML = [
     ["home", "◉", "Главная"],
     ["progress", "▤", "Прогресс"],
-    ["ach", "✦", `Награды ${openCount}`],
-    ["overview", "◈", "Обзор"]
+    ["ach", "✦", `Награды ${openCount}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
   syncTabHeight();
@@ -936,8 +1038,9 @@ function coverHTML(p) {
 
 // карусель обложек: свайп переключает композицию
 function coverRailHTML() {
-  const list = isPiano() ? data.piano.pieces : [null];
-  const activeIdx = isPiano() ? data.piano.pieces.findIndex(p => p.id === data.piano.activePiece) : 0;
+  const live = data.piano.pieces.filter(p => !p.archived);
+  const list = isPiano() ? live : [null];
+  const activeIdx = isPiano() ? Math.max(0, live.findIndex(p => p.id === data.piano.activePiece)) : 0;
   const slides = list.map((p, i) =>
     `<div class="slot ${i === activeIdx ? "on" : ""}" data-i="${i}">${coverHTML(p)}</div>`).join("");
   const dots = list.length > 1
@@ -961,6 +1064,7 @@ function ringHTML(pct) {
 
 function renderHome() {
   const s = curStats();
+  const g = goalProgress();
   const st = s.streak;
   const doneToday = !!entryFor(todayStr());
   const ach = achState();
@@ -974,9 +1078,12 @@ function renderHome() {
 
   const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
   const list = isBook() ? NUDGES_BOOK : isPastel() ? NUDGES_PASTEL : NUDGES_PIANO;
+  const freeze = activeFreeze();
   let nudge;
-  if (!gistReady()) nudge = `Записи включатся после подключения <b>GitHub Gist</b> — так прогресс не потеряется`;
-  else if (doneToday) nudge = `Сегодня отмечено. Возвращайся завтра — серия станет <b>${st + 1}</b>`;
+  if (freeze) nudge = `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится, можно спокойно отдыхать`;
+  else if (!gistReady()) nudge = `Записи включатся после подключения <b>GitHub Gist</b> — так прогресс не потеряется`;
+  else if (g.done) nudge = `🎯 Цель недели закрыта: <b>${g.days} из ${g.goal}</b>. Всё сверху — в удовольствие`;
+  else if (doneToday) nudge = `Сегодня отмечено. До цели недели — ещё <b>${g.left} ${plural(g.left, "день", "дня", "дней")}</b>`;
   else if (st >= 2) nudge = `Серия <b>${st} ${plural(st, "день", "дня", "дней")}</b> — не разрывай её сегодня`;
   else if (st === 1) nudge = `Вчера занимался — сделай сегодня, и <b>серия пойдёт</b>`;
   else nudge = list[seed % list.length];
@@ -990,8 +1097,9 @@ function renderHome() {
         <p>${sub}</p>
       </div>
       <div class="chips">
-        <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
-        <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b> из ${ach.length} ${plural(ach.length, "награда", "награды", "наград")}</button>
+        <span class="chip ${g.done ? "goal-done" : ""}" title="Общая цель на неделю">🎯 <b>${g.days}</b>/${g.goal} за нед.</span>
+        <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")}</span>
+        <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b>/${ach.length} наград</button>
       </div>
       <button class="cta ${!gistReady() ? "locked" : doneToday ? "done" : ""}" id="ctaBtn" type="button">
         ${!gistReady()
@@ -1010,6 +1118,8 @@ function renderHome() {
   });
 
   $("#achChip").addEventListener("click", () => {
+    achView = { track: data.active, pieceId: isPiano() ? piece().id : null };
+    cfg.achView = achView;
     tab = "ach"; cfg.tab = tab; saveCfg();
     render();
   });
@@ -1040,7 +1150,7 @@ function setupRail() {
     rail.scrollTo({ left: centerOfSlot(slot) - rail.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
   };
 
-  const activeIdx = isBook() ? 0 : data.piano.pieces.findIndex(p => p.id === data.piano.activePiece);
+  const activeIdx = isBook() ? 0 : data.piano.pieces.filter(p => !p.archived).findIndex(p => p.id === data.piano.activePiece);
   centerOn(Math.max(0, activeIdx), false);
 
   if (isBook() || slots.length < 2) return;
@@ -1057,7 +1167,7 @@ function setupRail() {
         if (d < bestDist) { bestDist = d; best = i; }
       });
       slots.forEach((s, i) => s.classList.toggle("on", i === best));
-      const target = data.piano.pieces[best];
+      const target = data.piano.pieces.filter(p => !p.archived)[best];
       if (target && target.id !== data.piano.activePiece) switchPiece(target.id);
     }, 130);
   }, { passive: true });
@@ -1097,10 +1207,14 @@ function updateHeroInfo() {
 
   const chipBox = $(".chips");
   if (chipBox) {
+    const g = goalProgress();
     chipBox.innerHTML = `
-      <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
-      <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b> из ${ach.length} ${plural(ach.length, "награда", "награды", "наград")}</button>`;
+      <span class="chip ${g.done ? "goal-done" : ""}">🎯 <b>${g.days}</b>/${g.goal} за нед.</span>
+      <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")}</span>
+      <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b>/${ach.length} наград</button>`;
     $("#achChip").addEventListener("click", () => {
+      achView = { track: data.active, pieceId: isPiano() ? piece().id : null };
+      cfg.achView = achView;
       tab = "ach"; cfg.tab = tab; saveCfg();
       render();
     });
@@ -1114,7 +1228,7 @@ function updateHeroInfo() {
 
   const dots = $(".dots");
   if (dots) {
-    const idx = data.piano.pieces.findIndex(p => p.id === data.piano.activePiece);
+    const idx = data.piano.pieces.filter(p => !p.archived).findIndex(p => p.id === data.piano.activePiece);
     [...dots.children].forEach((d, i) => d.classList.toggle("on", i === idx));
   }
 
@@ -1140,78 +1254,214 @@ function barMap(arr, cls) {
   return `<div class="bar-strip" style="--n:${bars}">${cells}</div>`;
 }
 
-function renderProgress() {
-  const s = curStats();
-  const start = dateStr(mondayOf(new Date()));
-  const week = entries().filter(e => e.date >= start);
+// активность по дням недели: сколько занятий в каждый день (все хобби)
+function weekDots() {
+  const monday = mondayOf(new Date());
+  const all = [...data.piano.entries, ...data.book.entries, ...data.pastel.entries].filter(e => !e.deleted);
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday); d.setDate(d.getDate() + i);
+    const ds = dateStr(d);
+    const cnt = new Set(all.filter(e => e.date === ds).map(e => e.date + (e.pieceId || e.bookId || e.courseId || ""))).size;
+    out.push({ ds, dow: DOW[i], count: cnt, future: ds > todayStr(), today: ds === todayStr(), frozen: isFrozen(ds) });
+  }
+  return out;
+}
 
-  let middle;
-  if (isPastel()) {
-    let cnt = 0;
-    for (const e of week) cnt += (e.lessons || []).length;
-    middle = `<div class="stat"><b>${cnt}</b><span>${plural(cnt, "урок", "урока", "уроков")} за неделю</span></div>`;
-  } else if (isBook()) {
-    const b = data.book.book;
-    let before = b.startPage || 0, after = before;
-    for (const e of entries()) {
-      if (e.date < start) before = Math.max(before, e.page || 0);
-      after = Math.max(after, e.page || 0);
+// всё сделанное за отрезок дат: дни, такты, страницы, уроки
+function rangeStats(from, to) {
+  const inRange = e => !e.deleted && e.date >= from && e.date <= to;
+
+  const piano = data.piano.entries.filter(inRange);
+  let bars = 0;
+  for (const e of piano) for (const sp of e.spans || []) bars += sp.to - sp.from + 1;
+
+  const book = data.book.entries.filter(inRange);
+  let pagesBefore = data.book.book.startPage || 0, pagesAfter = 0;
+  for (const e of data.book.entries.filter(e => !e.deleted && e.date < from)) pagesBefore = Math.max(pagesBefore, e.page || 0);
+  for (const e of book) pagesAfter = Math.max(pagesAfter, e.page || 0);
+  const pages = pagesAfter ? Math.max(0, pagesAfter - pagesBefore) : 0;
+
+  const pastel = data.pastel.entries.filter(inRange);
+  let lessons = 0;
+  for (const e of pastel) lessons += (e.lessons || []).length;
+
+  const days = new Set([...piano, ...book, ...pastel].map(e => e.date)).size;
+  const tracks = new Set([
+    ...(piano.length ? ["piano"] : []),
+    ...(book.length ? ["book"] : []),
+    ...(pastel.length ? ["pastel"] : [])
+  ]);
+  return { days, bars, pages, lessons, tracks, entries: piano.length + book.length + pastel.length };
+}
+
+// границы текущего периода — вся неделя или весь месяц
+function periodRange() {
+  const d = new Date();
+  if (period === "month") {
+    return {
+      from: dateStr(new Date(d.getFullYear(), d.getMonth(), 1)),
+      to: dateStr(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+    };
+  }
+  const monday = mondayOf(d);
+  const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+  return { from: dateStr(monday), to: dateStr(sunday) };
+}
+
+// точки графика: вся текущая неделя или весь месяц, включая дни впереди
+function periodSeries() {
+  const out = [];
+  const today = todayStr();
+
+  if (period === "month") {
+    const d = new Date();
+    const total = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    for (let i = 1; i <= total; i++) {
+      const ds = dateStr(new Date(d.getFullYear(), d.getMonth(), i));
+      out.push({ ds, label: (i === 1 || i % 5 === 0) ? String(i) : "", value: rangeStats(ds, ds).entries,
+        today: ds === today, frozen: isFrozen(ds), future: ds > today });
     }
-    const read = Math.max(0, Math.min(after, b.pages) - Math.min(before, b.pages));
-    middle = `<div class="stat"><b>${read}</b><span>${plural(read, "страница", "страницы", "страниц")} за неделю</span></div>`;
-  } else {
-    let worked = 0;
-    for (const e of week) for (const sp of e.spans || []) worked += sp.to - sp.from + 1;
-    middle = `<div class="stat"><b>${worked}</b><span>${plural(worked, "такт", "такта", "тактов")} за неделю</span></div>`;
+    return out;
   }
 
-  const detail = isPastel() ? `
-    <div class="panel">
-      <h3>Курс</h3>
-      <div class="lessons flat">
-        ${course().lessons.map((l, i) => `
-          <div class="lesson ${s.doneSet.has(i) ? "was" : ""}">
-            <span class="ln">${i + 1}</span>
-            <span class="lt">${esc(l.title)}<i>${fmtDur(l.dur)}</i></span>
-            <span class="lc">${s.doneSet.has(i) ? "✓" : "○"}</span>
-          </div>`).join("")}
-      </div>
-    </div>` : isBook() ? `
-    <div class="panel">
-      <h3>Книга</h3>
-      <div class="pages-bar"><div class="pages-fill" style="width:${s.pct.toFixed(1)}%"></div></div>
-      <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:0.85rem;color:var(--muted)">
-        <span>стр. <b style="color:var(--ink)">${s.page}</b> из ${s.pages}</span>
-        <span>${esc(s.chapter.name)}</span>
-      </div>
-    </div>` : `
-    <div class="panel">
-      <h3>Такты</h3>
-      <div class="hand">
-        <div class="hand-head"><span>𝄞 Правая</span><b>${Math.round(s.pctR)}%</b></div>
-        ${barMap(s.passes.right, "r")}
-      </div>
-      <div class="hand">
-        <div class="hand-head"><span>𝄢 Левая</span><b>${Math.round(s.pctL)}%</b></div>
-        ${barMap(s.passes.left, "l")}
-      </div>
-      <div class="legend">
-        <span><i class="bar"></i> не трогал</span>
-        <span><i class="bar l1 r"></i> разобрал</span>
-        <span><i class="bar l3 r"></i> закрепил</span>
+  const monday = mondayOf(new Date());
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday); d.setDate(d.getDate() + i);
+    const ds = dateStr(d);
+    out.push({ ds, label: DOW[i], value: rangeStats(ds, ds).entries,
+      today: ds === today, frozen: isFrozen(ds), future: ds > today });
+  }
+  return out;
+}
+
+// плавная линия активности за выбранный период
+function lineChartHTML(points) {
+  const W = 320, H = 118, padX = 14, top = 16, bottom = 84;
+  const max = Math.max(1, ...points.map(p => p.value));
+  const n = points.length;
+  const pts = points.map((p, i) => ({
+    x: padX + (n > 1 ? i * (W - padX * 2) / (n - 1) : (W - padX * 2) / 2),
+    y: bottom - (p.value / max) * (bottom - top),
+    ...p
+  }));
+
+  let path = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const cx = (p0.x + p1.x) / 2;
+    path += ` C ${cx.toFixed(1)} ${p0.y.toFixed(1)}, ${cx.toFixed(1)} ${p1.y.toFixed(1)}, ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  }
+  const area = `${path} L ${pts[pts.length - 1].x.toFixed(1)} ${bottom + 2} L ${pts[0].x.toFixed(1)} ${bottom + 2} Z`;
+  const dotEvery = n > 14 ? Math.ceil(n / 14) : 1;
+
+  return `
+    <div class="wline">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgba(255,201,77,0.35)"/>
+            <stop offset="100%" stop-color="rgba(255,201,77,0)"/>
+          </linearGradient>
+        </defs>
+        <line x1="${padX}" y1="${bottom + 2}" x2="${W - padX}" y2="${bottom + 2}" stroke="rgba(255,255,255,0.08)"/>
+        <path d="${area}" fill="url(#lineFill)"/>
+        <path d="${path}" fill="none" stroke="#ffc94d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        ${pts.map((p, i) => (i % dotEvery === 0 || p.today) ? `
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.today ? 5 : 3.5}"
+            fill="${p.value ? "#ffc94d" : "#2a2438"}" stroke="${p.today ? "#fff" : "#ffc94d"}" stroke-width="${p.today ? 2 : 1.4}"
+            opacity="${p.future ? 0.35 : 1}"/>` : "").join("")}
+      </svg>
+      <div class="wl-days" style="grid-template-columns: repeat(${n}, 1fr)">
+        ${pts.map(p => `<span class="${p.today ? "now" : ""} ${p.frozen ? "frz" : ""}">${esc(p.label || "")}</span>`).join("")}
       </div>
     </div>`;
+}
 
-  $("#view").innerHTML = `
-    ${detail}
-    <div class="panel">
-      <h3>Эта неделя</h3>
-      <div class="stats">
-        <div class="stat"><b>${week.length}</b><span>${plural(week.length, "день", "дня", "дней")} на неделе</span></div>
-        ${middle}
-        <div class="stat"><b>${s.streak}</b><span>${plural(s.streak, "день", "дня", "дней")} подряд</span></div>
-      </div>
+// шапка «Прогресс»: неделя или месяц целиком
+function summaryHTML() {
+  const r = periodRange();
+  const st = rangeStats(r.from, r.to);
+  const g = goalProgress();
+  const now = new Date();
+
+  let ringVal, ringMax, cap, sub, hint;
+  if (period === "month") {
+    const total = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const left = total - now.getDate();
+    const weeks = Math.round(total / 7);           // недель в месяце
+    const monthGoal = (data.weekGoal || 4) * weeks; // цель месяца = недельная × недели
+    ringVal = st.days; ringMax = monthGoal;
+    cap = new Intl.DateTimeFormat("ru", { month: "long" }).format(now);
+    sub = `из ${monthGoal} ${plural(monthGoal, "дня", "дней", "дней")} цели`;
+    hint = ringVal >= monthGoal
+      ? `Цель месяца взята! ${data.weekGoal} в неделю × ${weeks} ${plural(weeks, "неделя", "недели", "недель")}`
+      : `Цель месяца: ${data.weekGoal} в неделю × ${weeks} ${plural(weeks, "неделя", "недели", "недель")} · впереди ${left} ${plural(left, "день", "дня", "дней")}`;
+  } else {
+    ringVal = g.days; ringMax = g.goal;
+    cap = "Эта неделя";
+    sub = `из ${g.goal} ${plural(g.goal, "дня", "дней", "дней")} цели`;
+    hint = g.done
+      ? "Цель недели закрыта — всё сверху в удовольствие"
+      : `До цели ещё ${g.left} ${plural(g.left, "день", "дня", "дней")}`;
+  }
+
+  const R = 78, C = 2 * Math.PI * R;
+  const on = C * Math.min(1, ringMax ? ringVal / ringMax : 0);
+  const best = bestStreakAll();
+
+  return `
+    <div class="periods">
+      ${[["week", "Неделя"], ["month", "Месяц"]].map(([k, t]) =>
+        `<button class="pbtn ${period === k ? "on" : ""}" data-p="${k}" type="button">${t}</button>`).join("")}
     </div>
+
+    <div class="summary">
+      <div class="sum-ring">
+        <svg viewBox="0 0 190 190">
+          <circle class="bg" cx="95" cy="95" r="${R}"></circle>
+          ${ringVal ? `<circle class="fg" cx="95" cy="95" r="${R}" stroke-dasharray="${on.toFixed(1)} ${C.toFixed(1)}"></circle>` : ""}
+        </svg>
+        <div class="sum-txt">
+          <span class="sum-cap">${esc(cap)}</span>
+          <b>${ringVal}</b>
+          <span class="sum-sub">${esc(sub)}</span>
+        </div>
+      </div>
+
+      <div class="sum-chips">
+        <div class="sc ${best ? "hot" : ""}"><b>🔥 ${best}</b><span>серия</span></div>
+        <div class="sc"><b>${st.days}</b><span>${plural(st.days, "день", "дня", "дней")}</span></div>
+        <div class="sc"><b>${st.bars}</b><span>${plural(st.bars, "такт", "такта", "тактов")}</span></div>
+        <div class="sc"><b>${st.pages}</b><span>страниц</span></div>
+        <div class="sc"><b>${st.lessons}</b><span>${plural(st.lessons, "урок", "урока", "уроков")}</span></div>
+      </div>
+
+      ${lineChartHTML(periodSeries())}
+      <div class="period-hint">${esc(hint)}</div>
+    </div>`;
+}
+
+// лучшая серия среди всех хобби прямо сейчас
+function bestStreakAll() {
+  const save = data.active, savePiece = data.piano.activePiece;
+  let best = 0;
+  for (const p of data.piano.pieces.filter(x => !x.archived)) {
+    data.active = "piano"; data.piano.activePiece = p.id;
+    best = Math.max(best, streak());
+  }
+  data.active = "book"; best = Math.max(best, streak());
+  data.active = "pastel"; best = Math.max(best, streak());
+  data.active = save; data.piano.activePiece = savePiece;
+  return best;
+}
+
+function renderProgress() {
+  $("#view").innerHTML = `
+    <div class="panel sum-panel">
+      ${summaryHTML()}
+    </div>
+
     <div class="panel">
       <div class="cal-head">
         <div class="cal-title" id="calTitle"></div>
@@ -1221,10 +1471,17 @@ function renderProgress() {
         </div>
       </div>
       <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-legend">
+        <span><i class="dot p"></i> пианино</span>
+        <span><i class="dot b"></i> чтение</span>
+        <span><i class="dot c"></i> пастель</span>
+        <span><i class="dot f"></i> пауза</span>
+      </div>
     </div>
+
     <div class="panel">
       <div class="cal-head">
-        <h3 style="margin:0">Запись дня</h3>
+        <h3 style="margin:0">День</h3>
         <div class="day-nav">
           <button id="dayPrev" type="button">‹</button>
           <button class="cur" id="dayCur" type="button"></button>
@@ -1237,6 +1494,13 @@ function renderProgress() {
   renderCalendar();
   renderDayBox();
 
+  document.querySelectorAll(".pbtn").forEach(b =>
+    b.addEventListener("click", () => {
+      period = b.dataset.p;
+      cfg.period = period; saveCfg();
+      renderProgress();
+    }));
+
   $("#calPrev").addEventListener("click", () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });
   $("#calNext").addEventListener("click", () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); });
   $("#dayPrev").addEventListener("click", () => shiftDay(-1));
@@ -1244,77 +1508,209 @@ function renderProgress() {
   $("#dayCur").addEventListener("click", () => goToDate(todayStr()));
 }
 
+// все записи всех хобби за дату — календарь и день теперь общие
+function allEntriesOn(ds) {
+  const out = [];
+  for (const e of data.piano.entries.filter(e => !e.deleted && e.date === ds)) {
+    const p = data.piano.pieces.find(x => x.id === (e.pieceId || "bwv853"));
+    out.push({ track: "piano", icon: "🎹", title: p ? p.name : "Пианино", entry: e,
+      what: (e.spans || []).length ? e.spans.map(spanText).join(" · ") : "занимался" });
+  }
+  for (const e of data.book.entries.filter(e => !e.deleted && e.date === ds)) {
+    out.push({ track: "book", icon: "📖", title: data.book.book.title, entry: e,
+      what: e.page ? `до ${e.page}-й стр.` : "читал" });
+  }
+  for (const e of data.pastel.entries.filter(e => !e.deleted && e.date === ds)) {
+    out.push({ track: "pastel", icon: "🎨", title: course().name, entry: e,
+      what: (e.lessons || []).length ? `урок${e.lessons.length > 1 ? "и" : ""} ${e.lessons.map(i => i + 1).join(", ")}` : "занимался" });
+  }
+  return out;
+}
+
+function historyHTML() {
+  const hist = weeklyHistory(12);
+  const max = Math.max(1, ...hist.map(h => h.days));
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+  const total = hist.reduce((a, h) => a + h.days, 0);
+
+  return `
+    <div class="hist">
+      ${hist.map((h, i) => `
+        <div class="hb" title="${fmt.format(fromStr(h.start))}: ${h.days} ${plural(h.days, "день", "дня", "дней")}">
+          <i style="height:${Math.round(h.days / max * 100)}%"></i>
+          <span>${i % 3 === 0 ? fmt.format(fromStr(h.start)).replace(/\s.*/, "") : ""}</span>
+        </div>`).join("")}
+    </div>
+    <div class="hist-note">За 12 недель — <b>${total}</b> ${plural(total, "занятие", "занятия", "занятий")} по этому материалу</div>`;
+}
+
 function renderCalendar() {
-  const all = entries();
-  const marked = new Set(all.map(e => e.date));
-  const noData = new Set(all.filter(e => isBook() ? !e.page : isPastel() ? !(e.lessons || []).length : !(e.spans || []).length).map(e => e.date));
   const first = new Date(calYear, calMonth, 1);
   const total = new Date(calYear, calMonth + 1, 0).getDate();
   const lead = (first.getDay() + 6) % 7;
   const today = todayStr();
 
-  $("#calTitle").textContent = new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" }).format(first).replace(" г.", "");
+  $("#calTitle").textContent = new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" })
+    .format(first).replace(" г.", "");
 
   let html = DOW.map(d => `<div class="dow">${d}</div>`).join("");
   for (let i = 0; i < lead; i++) html += `<div class="day blank"></div>`;
+
   for (let d = 1; d <= total; d++) {
     const ds = dateStr(new Date(calYear, calMonth, d));
+    const on = allEntriesOn(ds);
+    const tracks = new Set(on.map(x => x.track));
     let cls = "day";
-    if (marked.has(ds)) cls += noData.has(ds) ? " nodata" : " on";
+    if (on.length) cls += " has";
+    if (isFrozen(ds)) cls += " frozen";
     if (ds === today) cls += " today";
     if (ds === selectedDate) cls += " sel";
     if (ds > today) cls += " future";
-    html += `<div class="${cls}" data-date="${ds}">${d}</div>`;
+    const dots = [...tracks].map(t => `<i class="dot ${t === "piano" ? "p" : t === "book" ? "b" : "c"}"></i>`).join("");
+    html += `<div class="${cls}" data-date="${ds}"><b>${d}</b><span class="dots-row">${dots}</span></div>`;
   }
   $("#calGrid").innerHTML = html;
+
   document.querySelectorAll(".day[data-date]").forEach(el =>
     el.addEventListener("click", () => goToDate(el.dataset.date)));
 }
 
 function renderDayBox() {
-  const e = entryFor(selectedDate);
   $("#dayCur").textContent = fmtDay(selectedDate);
   $("#dayNext").disabled = selectedDate >= todayStr();
 
-  if (!e) {
-    $("#dayBox").innerHTML = `
-      <div class="empty" style="margin-bottom:10px">Этот день не отмечен</div>
-      <button class="btn" id="markDay" type="button">＋ Отметить ${fmtDay(selectedDate)}</button>`;
-    $("#markDay").addEventListener("click", openLogSheet);
-    return;
-  }
-
-  const what = isBook()
-    ? (e.page ? `до ${e.page}-й стр.` : "читал")
-    : isPastel()
-      ? ((e.lessons || []).length ? `урок${e.lessons.length > 1 ? "и" : ""} ${e.lessons.map(i => i + 1).join(", ")}` : "занимался")
-      : ((e.spans || []).length ? e.spans.map(spanText).join(" · ") : "занимался");
+  const list = allEntriesOn(selectedDate);
+  const frozen = isFrozen(selectedDate);
 
   $("#dayBox").innerHTML = `
-    <div class="rec">
-      <span class="what">${what}</span>
-      <span class="note">${e.note ? esc(e.note) : ""}</span>
-      <button class="del" data-id="${e.id}" type="button">✕</button>
-    </div>
-    <button class="btn" id="markDay" type="button" style="margin-top:10px">＋ Дополнить запись</button>`;
+    ${frozen ? `<div class="day-freeze">🌴 Этот день в паузе — серию не рвёт</div>` : ""}
+    ${list.length
+      ? `<div class="day-list">${list.map(x => `
+          <div class="rec">
+            <span class="what">${x.icon} ${x.what}</span>
+            <span class="note">${x.entry.note ? esc(x.entry.note) : esc(x.title)}</span>
+            <button class="del" data-del="${x.entry.id}" data-track="${x.track}" type="button">✕</button>
+          </div>`).join("")}</div>`
+      : `<div class="empty">В этот день ничего не отмечено</div>`}
+    <div class="day-add">
+      ${[["piano", "🎹"], ["book", "📖"], ["pastel", "🎨"]].map(([t, ic]) =>
+        `<button class="da" data-add="${t}" type="button">${ic} отметить</button>`).join("")}
+    </div>`;
 
-  $("#dayBox .del").addEventListener("click", () => deleteEntry(e.id));
-  $("#markDay").addEventListener("click", openLogSheet);
+  document.querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", () => {
+      const track = b.dataset.track;
+      const e = data[track].entries.find(x => x.id === b.dataset.del);
+      if (!e) return;
+      e.deleted = true; e.updatedAt = now();
+      saveData(); schedulePush(); render();
+      toast("Запись удалена");
+    }));
+
+  document.querySelectorAll("[data-add]").forEach(b =>
+    b.addEventListener("click", () => {
+      if (data.active !== b.dataset.add) {
+        data.active = b.dataset.add;
+        pending = []; pickLessons = [];
+        saveData(); syncPickers();
+      }
+      openLogSheet();
+    }));
+}
+
+// все материалы с их наградами — для входного списка
+function achMaterials() {
+  const save = data.active, savePiece = data.piano.activePiece;
+  const out = [];
+
+  for (const p of data.piano.pieces.filter(x => !x.archived)) {
+    data.active = "piano"; data.piano.activePiece = p.id;
+    const list = achState();
+    out.push({ track: "piano", pieceId: p.id, icon: "🎹", title: p.name,
+      open: list.filter(a => a.done).length, total: list.length });
+  }
+  data.active = "book";
+  let list = achState();
+  out.push({ track: "book", icon: "📖", title: data.book.book.title,
+    open: list.filter(a => a.done).length, total: list.length });
+
+  data.active = "pastel";
+  list = achState();
+  out.push({ track: "pastel", icon: "🎨", title: course().name,
+    open: list.filter(a => a.done).length, total: list.length });
+
+  data.active = save; data.piano.activePiece = savePiece;
+  return out;
+}
+
+// выполняет функцию в контексте выбранного материала
+function withMaterial(view, fn) {
+  const save = data.active, savePiece = data.piano.activePiece;
+  data.active = view.track;
+  if (view.track === "piano" && view.pieceId) data.piano.activePiece = view.pieceId;
+  const res = fn();
+  data.active = save; data.piano.activePiece = savePiece;
+  return res;
 }
 
 function renderAch() {
-  const ach = achState();
+  if (!achView) { renderAchList(); return; }
+  renderAchMaterial(achView);
+}
+
+// входной экран: материалы и сколько наград по каждому
+function renderAchList() {
+  const mats = achMaterials();
+  const totalOpen = mats.reduce((a, m) => a + m.open, 0);
+  const totalAll = mats.reduce((a, m) => a + m.total, 0);
+
+  $("#view").innerHTML = `
+    <div class="ach-top">
+      <div class="ach-count"><b>${totalOpen}</b><span>из ${totalAll} наград открыто</span></div>
+      <div class="ach-progress"><i style="width:${totalAll ? totalOpen / totalAll * 100 : 0}%"></i></div>
+    </div>
+
+    <div class="mat-list">
+      ${mats.map(m => `
+        <button class="mat-card" data-track="${m.track}" data-piece="${m.pieceId || ""}" type="button">
+          <span class="mc-ic">${m.icon}</span>
+          <span class="mc-body">
+            <span class="mc-title">${esc(m.title)}</span>
+            <span class="mc-bar"><i style="width:${m.total ? m.open / m.total * 100 : 0}%"></i></span>
+          </span>
+          <span class="mc-num">${m.open}<i>/${m.total}</i></span>
+        </button>`).join("")}
+    </div>`;
+
+  document.querySelectorAll(".mat-card").forEach(b =>
+    b.addEventListener("click", () => {
+      achView = { track: b.dataset.track, pieceId: b.dataset.piece || null };
+      cfg.achView = achView; saveCfg();
+      renderAch();
+      $("#view").scrollTop = 0;
+    }));
+}
+
+// награды конкретного материала
+function renderAchMaterial(view) {
+  const ach = withMaterial(view, () => achState());
+  const words = withMaterial(view, () => achWords());
+  const title = withMaterial(view, () => isBook() ? data.book.book.title : isPastel() ? course().name : piece().name);
+  const icon = view.track === "book" ? "📖" : view.track === "pastel" ? "🎨" : "🎹";
   const open = ach.filter(a => a.done).length;
   const next = ach.find(a => !a.done && !a.secret);
   let teased = 0;
 
   $("#view").innerHTML = `
+    <button class="back" id="achBack" type="button">‹ Все материалы</button>
+
     <div class="ach-top">
-      <div class="ach-title">${isBook() ? "📖 " + esc(data.book.book.title) : isPastel() ? "🎨 " + esc(course().name) : "🎹 " + esc(piece().name)}</div>
+      <div class="ach-title">${icon} ${esc(title)}</div>
       <div class="ach-count"><b>${open}</b><span>из ${ach.length} наград открыто</span></div>
       <div class="ach-progress"><i style="width:${open / ach.length * 100}%"></i></div>
       ${next ? `<div style="font-size:0.86rem;color:var(--muted)">Ближайшее: ${next.icon} <b style="color:var(--ink)">${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
     </div>
+
     <div class="ach-grid">
       ${ach.map(a => {
         if (a.done) return `
@@ -1331,18 +1727,25 @@ function renderAch() {
       }).join("")}
     </div>`;
 
+  $("#achBack").addEventListener("click", () => {
+    achView = null; cfg.achView = null; saveCfg();
+    renderAch();
+    $("#view").scrollTop = 0;
+  });
+
   document.querySelectorAll(".ach").forEach(b =>
     b.addEventListener("click", () => {
       const a = ach.find(x => x.id === b.dataset.id);
-      openAchSheet(a, b.classList.contains("next"));
+      openAchSheet(a, b.classList.contains("next"), words);
     }));
 }
 
 // Шторка с деталями награды
-function openAchSheet(a, teased) {
+function openAchSheet(a, teased, words) {
   sheetMode = "ach";
   const known = a.done || teased;      // секретные закрытые не раскрываем
-  const s = curStats();
+  const s = achView ? withMaterial(achView, () => curStats()) : curStats();
+  const wordOfLocal = (x) => x.word || (words || achWords())[x.id] || x.hint;
 
   // подсказка «сколько осталось» для понятных числовых условий
   let progressLine = "";
@@ -1362,7 +1765,7 @@ function openAchSheet(a, teased) {
       <div class="big ${a.done ? "open" : known ? "" : "hidden"}">${known ? a.icon : "🔒"}</div>
       <h3>${known ? esc(a.name) : "Секретная награда"}</h3>
       <span class="status ${a.done ? "open" : "wait"}">${a.done ? "Открыто" : "Ещё не открыто"}</span>
-      <p>${known ? esc(a.done ? wordOf(a) : a.hint) : "Откроется сама, когда сделаешь что-то особенное. Подсказки не будет 🙂"}</p>
+      <p>${known ? esc(a.done ? wordOfLocal(a) : a.hint) : "Откроется сама, когда сделаешь что-то особенное. Подсказки не будет 🙂"}</p>
       ${progressLine ? `<div class="cond">${progressLine}</div>` : ""}
     </div>
     <div class="sheet-actions">
@@ -1549,7 +1952,7 @@ function candidates() {
   const save = data.active, savePiece = data.piano.activePiece;
   const list = [];
 
-  for (const p of data.piano.pieces) {
+  for (const p of data.piano.pieces.filter(x => !x.archived)) {
     data.active = "piano"; data.piano.activePiece = p.id;
     const s = pianoStats();
     list.push({ track: "piano", pieceId: p.id, icon: "🎹", name: p.name,
@@ -1663,6 +2066,233 @@ function diagLine() {
     `<br>таббар ${r ? Math.round(r.height) : "?"}px, снизу ${r ? Math.round(innerHeight - r.bottom) : "?"}px · safe-area ${safe}`;
 }
 
+/* ── История по неделям и итоги недели ── */
+
+// последние N недель: сколько дней занимался активным материалом
+function weeklyHistory(weeks = 12) {
+  const days = new Set(entries().map(e => e.date));
+  const out = [];
+  const monday = mondayOf(new Date());
+  for (let i = weeks - 1; i >= 0; i--) {
+    const start = new Date(monday); start.setDate(start.getDate() - i * 7);
+    let n = 0;
+    for (let d = 0; d < 7; d++) {
+      const cur = new Date(start); cur.setDate(cur.getDate() + d);
+      if (cur > new Date()) break;
+      if (days.has(dateStr(cur))) n++;
+    }
+    out.push({ start: dateStr(start), days: n });
+  }
+  return out;
+}
+
+// прогресс общей недельной цели: любой день с любым занятием
+function goalProgress() {
+  const from = dateStr(mondayOf(new Date()));
+  const days = new Set(
+    [...data.piano.entries, ...data.book.entries, ...data.pastel.entries]
+      .filter(e => !e.deleted && e.date >= from).map(e => e.date)
+  ).size;
+  const goal = data.weekGoal || 4;
+  return { days, goal, left: Math.max(0, goal - days), done: days >= goal, pct: Math.min(100, days / goal * 100) };
+}
+
+// что сделано за неделю по всем хобби (и как это по сравнению с прошлой)
+function weekSummary(offset = 0) {
+  const monday = mondayOf(new Date());
+  monday.setDate(monday.getDate() - offset * 7);
+  const from = dateStr(monday);
+  const end = new Date(monday); end.setDate(end.getDate() + 6);
+  const to = dateStr(end);
+  const inWeek = (e) => !e.deleted && e.date >= from && e.date <= to;
+
+  const pianoEntries = data.piano.entries.filter(inWeek);
+  let bars = 0;
+  for (const e of pianoEntries) for (const sp of e.spans || []) bars += sp.to - sp.from + 1;
+
+  const bookEntries = data.book.entries.filter(inWeek);
+  let pagesFrom = null, pagesTo = null;
+  for (const e of data.book.entries.filter(e => !e.deleted && e.date < from)) pagesFrom = Math.max(pagesFrom || 0, e.page || 0);
+  for (const e of bookEntries) pagesTo = Math.max(pagesTo || 0, e.page || 0);
+  const base = Math.max(pagesFrom || 0, data.book.book.startPage || 0);
+  const pages = pagesTo ? Math.max(0, pagesTo - base) : 0;
+
+  const pastelEntries = data.pastel.entries.filter(inWeek);
+  let lessons = 0;
+  for (const e of pastelEntries) lessons += (e.lessons || []).length;
+
+  const allDays = new Set([...pianoEntries, ...bookEntries, ...pastelEntries].map(e => e.date));
+  return { from, to, days: allDays.size, bars, pages, lessons };
+}
+
+/* ── Архив: пройденный материал уходит в историю, дни занятий остаются ── */
+
+function currentMaterial() {
+  if (isBook()) {
+    const b = data.book.book, s = bookStats();
+    return { icon: "📖", title: b.title, sub: `${s.page} из ${s.pages} стр.`, pct: s.pct };
+  }
+  if (isPastel()) {
+    const c = course(), s = pastelStats();
+    return { icon: "🎨", title: c.name, sub: `${s.done} из ${s.lessons} уроков`, pct: s.pct };
+  }
+  const p = piece(), s = pianoStats();
+  return { icon: "🎹", title: p.name, sub: `${s.touchedR + s.touchedL} из ${s.bars * 2} тактов-рук`, pct: s.pct };
+}
+
+function archiveCurrent() {
+  const m = currentMaterial();
+  const days = new Set(entries().map(e => e.date)).size;
+
+  if (!confirm(`Отправить «${m.title}» в архив?\n\nПройдено: ${Math.round(m.pct)}%, ${days} ${plural(days, "день", "дня", "дней")} занятий.\nЗаписи и вклад в баланс останутся.`)) return;
+
+  data.archive.push({
+    id: uid(), track: data.active, icon: m.icon, title: m.title,
+    sub: m.sub, pct: Math.round(m.pct), days,
+    finishedAt: todayStr(), createdAt: now(), updatedAt: now()
+  });
+
+  if (isBook()) {
+    const title = prompt("Какую книгу читаешь теперь?", "");
+    if (title === null || !title.trim()) { data.archive.pop(); return; }
+    const pagesStr = prompt("Сколько в ней страниц?", "300");
+    const pages = Math.round(Number((pagesStr || "").replace(",", ".")));
+    if (!pages || pages < 1) { data.archive.pop(); toast("Не понял число страниц"); return; }
+    data.book.book = {
+      id: uid(), title: title.trim(), author: "", volume: "",
+      pages, startPage: 0, chapters: [{ name: "Начало", from: 1 }], updatedAt: now()
+    };
+  } else if (isPastel()) {
+    const name = prompt("Какой курс проходишь теперь?", "");
+    if (name === null || !name.trim()) { data.archive.pop(); return; }
+    const cnt = Math.round(Number((prompt("Сколько в нём уроков?", "10") || "").replace(",", ".")));
+    if (!cnt || cnt < 1) { data.archive.pop(); toast("Не понял число уроков"); return; }
+    data.pastel.course = {
+      id: uid(), name: name.trim(), author: "",
+      lessons: Array.from({ length: cnt }, (_, i) => ({ title: `Урок ${i + 1}`, dur: 600 })),
+      updatedAt: now()
+    };
+  } else {
+    const p = piece();
+    p.archived = true; p.updatedAt = now();
+    const rest = data.piano.pieces.filter(x => !x.archived);
+    if (!rest.length) {
+      const name = prompt("Какую вещь разбираешь теперь?", "");
+      if (name === null || !name.trim()) { p.archived = false; data.archive.pop(); return; }
+      const bars = Math.round(Number((prompt("Сколько в ней тактов?", "40") || "").replace(",", ".")));
+      if (!bars || bars < 1) { p.archived = false; data.archive.pop(); toast("Не понял число тактов"); return; }
+      const np = { id: uid(), author: "", name: name.trim(), bars, art: "keys", tone: "violet", updatedAt: now() };
+      data.piano.pieces.push(np);
+      data.piano.activePiece = np.id;
+    } else {
+      data.piano.activePiece = rest[0].id;
+    }
+  }
+
+  saveData(); schedulePush(); syncPickers(); render();
+  toast(`«${m.title}» в архиве`);
+}
+
+/* ── Пауза: отпуск и перерывы не рвут серию ── */
+
+function archiveUI() {
+  const cur = currentMaterial();
+  const list = (data.archive || []).filter(a => !a.deleted)
+    .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short", year: "numeric" });
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">📦 <b>Материалы</b> — пройденное уходит в архив, дни занятий остаются</div>
+      <div class="fz-empty">Сейчас: <b>${esc(cur.title)}</b> · ${Math.round(cur.pct)}%</div>
+      <button class="btn" id="archBtn" type="button">Отправить в архив и начать новое</button>
+      ${list.length ? `<div class="fz-list">${list.map(a => `
+        <div class="fz-item">
+          <span>${a.icon} ${esc(a.title)} · ${a.pct}% · ${fmt.format(fromStr(a.finishedAt)).replace(" г.", "")}</span>
+        </div>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+function bindArchiveUI() {
+  const b = $("#archBtn");
+  if (b) b.addEventListener("click", () => { closeSheet(); archiveCurrent(); });
+}
+
+function goalUI() {
+  const g = goalProgress();
+  return `
+    <div class="freeze">
+      <div class="fz-head">🎯 <b>Цель на неделю</b> — сколько дней заниматься чем угодно из трёх</div>
+      <div class="goal-pick">
+        ${[2, 3, 4, 5, 6, 7].map(n =>
+          `<button class="gbtn ${g.goal === n ? "on" : ""}" data-goal="${n}" type="button">${n}</button>`).join("")}
+      </div>
+      <div class="fz-empty">Сейчас: <b>${g.days} из ${g.goal}</b> на этой неделе</div>
+    </div>`;
+}
+
+function bindGoalUI() {
+  document.querySelectorAll("[data-goal]").forEach(b =>
+    b.addEventListener("click", () => {
+      data.weekGoal = Number(b.dataset.goal);
+      saveData(); schedulePush();
+      openSettingsSheet();
+      render();
+      toast(`Цель: ${data.weekGoal} ${plural(data.weekGoal, "день", "дня", "дней")} в неделю`);
+    }));
+}
+
+function freezeUI() {
+  const list = (data.freezes || []).filter(f => !f.deleted)
+    .sort((a, b) => a.from < b.from ? 1 : -1);
+  const today = todayStr();
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">🌴 <b>Пауза</b> — дни отпуска или болезни, которые не рвут серию</div>
+      <div class="fz-form">
+        <input class="note-input" id="fzFrom" type="date" value="${today}" max="2100-01-01">
+        <input class="note-input" id="fzTo" type="date" value="${today}" max="2100-01-01">
+        <button class="btn" id="fzAdd" type="button">Добавить</button>
+      </div>
+      ${list.length ? `<div class="fz-list">${list.map(f => `
+        <div class="fz-item ${today >= f.from && today <= f.to ? "now" : ""}">
+          <span>${fmtRange(f.from, f.to)}${today >= f.from && today <= f.to ? " · идёт сейчас" : ""}</span>
+          <button data-fz="${f.id}" type="button">✕</button>
+        </div>`).join("")}</div>` : `<div class="fz-empty">Пока пауз нет</div>`}
+    </div>`;
+}
+
+function fmtRange(from, to) {
+  const f = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+  return from === to ? f.format(fromStr(from)) : `${f.format(fromStr(from))} — ${f.format(fromStr(to))}`;
+}
+
+function bindFreezeUI() {
+  const add = $("#fzAdd");
+  if (!add) return;
+  add.addEventListener("click", () => {
+    const from = $("#fzFrom").value, to = $("#fzTo").value;
+    if (!from || !to) { toast("Укажи даты"); return; }
+    const a = from <= to ? from : to, b = from <= to ? to : from;
+    data.freezes.push({ id: uid(), from: a, to: b, createdAt: now(), updatedAt: now() });
+    saveData(); schedulePush();
+    toast("Пауза добавлена — серия не прервётся");
+    openSettingsSheet();
+    render();
+  });
+
+  document.querySelectorAll("[data-fz]").forEach(b =>
+    b.addEventListener("click", () => {
+      const f = data.freezes.find(x => x.id === b.dataset.fz);
+      if (!f) return;
+      f.deleted = true; f.updatedAt = now();
+      saveData(); schedulePush();
+      openSettingsSheet();
+      render();
+    }));
+}
+
 async function forceUpdate() {
   toast("Обновляю…");
   try {
@@ -1692,6 +2322,9 @@ function openSettingsSheet() {
         <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
+      ${goalUI()}
+      ${archiveUI()}
+      ${freezeUI()}
       <div class="version">Версия ${APP_VERSION}</div>
       <div class="diag">${diagLine()}</div>` : `
       <div class="info-note">
@@ -1704,11 +2337,17 @@ function openSettingsSheet() {
         <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
+      ${goalUI()}
+      ${archiveUI()}
+      ${freezeUI()}
       <div class="version">Версия ${APP_VERSION}</div>
       <div class="diag">${diagLine()}</div>`}`);
 
   $("#sClose").addEventListener("click", closeSheet);
   $("#sUpdate").addEventListener("click", forceUpdate);
+  bindFreezeUI();
+  bindGoalUI();
+  bindArchiveUI();
   if (connected) {
     $("#sSync").addEventListener("click", () => { closeSheet(); syncNow(true); });
     $("#sOff").addEventListener("click", () => { cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); closeSheet(); toast("Отключено"); });
@@ -1756,7 +2395,7 @@ async function connectGitHub(token) {
   }
 }
 
-const exportData = () => ({ v: 5, savedAt: now(), active: data.active, piano: data.piano, book: data.book, pastel: data.pastel });
+const exportData = () => ({ v: 6, savedAt: now(), active: data.active, weekGoal: data.weekGoal, piano: data.piano, book: data.book, pastel: data.pastel, freezes: data.freezes, archive: data.archive });
 
 function mergeLists(local, remote) {
   const map = new Map();
@@ -1785,6 +2424,9 @@ async function syncNow(manual) {
     data.piano.entries = mergeLists(data.piano.entries, remote.piano.entries);
     data.book.entries = mergeLists(data.book.entries, remote.book.entries);
     data.pastel.entries = mergeLists(data.pastel.entries, remote.pastel.entries);
+    if (remote.weekGoal && (remote.savedAt || 0) > (cfg.lastSync || 0)) data.weekGoal = remote.weekGoal;
+    data.freezes = mergeLists(data.freezes, remote.freezes);
+    data.archive = mergeLists(data.archive, remote.archive);
     saveData();
     const changed = JSON.stringify([data.piano, data.book, data.pastel])
       !== JSON.stringify([remote.piano, remote.book, remote.pastel]);
@@ -1818,7 +2460,9 @@ function schedulePush() {
 function init() {
   load();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
-  if (["home", "progress", "ach", "overview"].includes(cfg.tab)) tab = cfg.tab;
+  if (["home", "progress", "ach"].includes(cfg.tab)) tab = cfg.tab;
+  if (["week", "month"].includes(cfg.period)) period = cfg.period;
+  if (cfg.achView && cfg.achView.track) achView = cfg.achView;
   const t = new Date();
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();
@@ -1839,19 +2483,7 @@ function init() {
   render();
   if (cfg.token && cfg.gistId) { setSyncDot("ok"); syncNow(false); }
 
-  if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("sw.js").then(reg => {
-      reg.update().catch(() => {});
-      reg.addEventListener("updatefound", () => {
-        const sw = reg.installing;
-        if (!sw) return;
-        sw.addEventListener("statechange", () => {
-          // новая версия готова и старая ещё работает — подхватываем сразу
-          if (sw.state === "installed" && navigator.serviceWorker.controller) location.reload();
-        });
-      });
-    }).catch(() => {});
-  }
+
 }
 
 init();
