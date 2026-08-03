@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 21";
+const APP_VERSION = "2026.08.03 · 22";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -54,7 +54,7 @@ const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ── Состояние ── */
 let data = null;
-let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false };
+let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
 let tab = "home";                 // home | progress | ach | overview
@@ -1098,22 +1098,7 @@ function render() {
 
 function renderSeg() {
   const box = $("#seg");
-  if (tab === "progress" || tab === "ach") { box.style.display = "none"; box.innerHTML = ""; return; }
-  box.style.display = "";
-
-  box.innerHTML = [["piano", "🎹", "Пианино"], ["book", "📖", "Чтение"], ["pastel", "🎨", "Пастель"]]
-    .map(([id, ic, nm]) =>
-      `<button data-t="${id}" class="${data.active === id ? "on" : ""}" type="button"><span>${ic}</span>${nm}</button>`).join("");
-
-  document.querySelectorAll("#seg button").forEach(b =>
-    b.addEventListener("click", () => {
-      // лента едет к первому материалу этого хобби
-      if (railApi) {
-        const i = railApi.indexOfTrack(b.dataset.t);
-        if (i >= 0) { railApi.centerOn(i, true); return; }
-      }
-      switchTrack(b.dataset.t);
-    }));
+  if (box) { box.style.display = "none"; box.innerHTML = ""; }
 }
 
 // высота закреплённого таббара — чтобы контент не заезжал под него
@@ -2339,7 +2324,7 @@ function openSettingsSheet() {
   const connected = cfg.token && cfg.gistId;
   openSheet(`
     <h3>Настройки</h3>
-    <p class="sub">Синхронизация и данные приложения</p>
+    <p class="sub">Чтобы ничего не потерялось</p>
     ${connected ? `
       <div class="info-note">Синхронизация через гист <b>${esc(cfg.gistId)}</b></div>
       <div class="sheet-actions">
@@ -2494,13 +2479,16 @@ function init() {
   syncPickers();
 
   $("#gearBtn").addEventListener("click", openSettingsSheet);
-  $("#diceBtn").addEventListener("click", () => {
-    enableShake(true).then(ok => { if (ok) toast("Теперь можно просто потрясти телефон"); });
-    rollDice();
-  });
-
-  // если разрешение уже давали — включаем сразу
+  // встряхивание вместо кубика: разрешение спрашиваем один раз, при первом касании
   if (cfg.shake) enableShake(false);
+  else if (!cfg.shakeAsked) {
+    const askOnce = () => {
+      document.removeEventListener("pointerdown", askOnce);
+      cfg.shakeAsked = true; saveCfg();
+      enableShake(true);
+    };
+    document.addEventListener("pointerdown", askOnce, { once: true });
+  }
   $("#sheetBg").addEventListener("click", closeSheet);
   $("#cheerOk").addEventListener("click", () => {
     $("#cheer").classList.remove("show");
