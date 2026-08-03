@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 30";
+const APP_VERSION = "2026.08.03 · 31";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1885,29 +1885,29 @@ const KEYS_ART = `
   </div>`;
 
 const WAVE_ART = `
-  <svg class="wave" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true">
-    <path d="M0 30 Q 15 16 30 30 T 60 30 T 90 30 T 120 30" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M0 38 Q 15 26 30 38 T 60 38 T 90 38 T 120 38" fill="none" stroke="rgba(255,255,255,.34)" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="93" cy="13" r="7" fill="rgba(255,201,77,.85)"/>
+  <svg class="wave" viewBox="0 0 120 56" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <circle cx="92" cy="15" r="8" fill="rgba(255,201,77,.85)"/>
+    <path d="M2 36 Q 17 24 32 36 T 62 36 T 92 36 T 118 36" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M2 45 Q 17 33 32 45 T 62 45 T 92 45 T 118 45" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="2.2" stroke-linecap="round"/>
   </svg>`;
 
 const SEA_ART = `
-  <svg class="wave sea" viewBox="0 0 120 60" preserveAspectRatio="none" aria-hidden="true">
-    <path d="M52 14 L52 36" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round"/>
-    <path d="M52 16 L72 30 L52 32 Z" fill="rgba(255,255,255,.72)"/>
-    <path d="M34 36 L76 36 L68 44 L42 44 Z" fill="rgba(255,255,255,.55)"/>
-    <path d="M0 50 Q 15 42 30 50 T 60 50 T 90 50 T 120 50" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M0 57 Q 15 49 30 57 T 60 57 T 90 57 T 120 57" fill="none" stroke="rgba(255,255,255,.26)" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="98" cy="14" r="6" fill="rgba(255,201,77,.85)"/>
+  <svg class="wave sea" viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <circle cx="98" cy="14" r="7" fill="rgba(255,201,77,.85)"/>
+    <path d="M52 10 L52 40" stroke="rgba(255,255,255,.78)" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M54 13 L74 28 L54 34 Z" fill="rgba(255,255,255,.7)"/>
+    <path d="M34 40 L78 40 L70 49 L42 49 Z" fill="rgba(255,255,255,.55)"/>
+    <path d="M4 54 Q 19 46 34 54 T 64 54 T 94 54 T 116 54" fill="none" stroke="rgba(255,255,255,.48)" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M4 61 Q 19 53 34 61 T 64 61 T 94 61 T 116 61" fill="none" stroke="rgba(255,255,255,.24)" stroke-width="2" stroke-linecap="round"/>
   </svg>`;
 
 const PINE_ART = `
-  <svg class="wave pine" viewBox="0 0 120 60" preserveAspectRatio="none" aria-hidden="true">
-    <path d="M60 6 L70 26 L64 26 L74 44 L46 44 L56 26 L50 26 Z" fill="rgba(255,255,255,.62)"/>
-    <path d="M28 16 L36 32 L31 32 L39 46 L17 46 L25 32 L20 32 Z" fill="rgba(255,255,255,.34)"/>
-    <path d="M92 16 L100 32 L95 32 L103 46 L81 46 L89 32 L84 32 Z" fill="rgba(255,255,255,.34)"/>
-    <path d="M0 52 L120 52" stroke="rgba(255,255,255,.32)" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="103" cy="12" r="6" fill="rgba(255,201,77,.8)"/>
+  <svg class="wave pine" viewBox="0 0 120 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <circle cx="102" cy="13" r="7" fill="rgba(255,201,77,.8)"/>
+    <path d="M60 8 L69 28 L64 28 L74 48 L46 48 L56 28 L51 28 Z" fill="rgba(255,255,255,.62)"/>
+    <path d="M30 20 L37 35 L33 35 L41 49 L19 49 L27 35 L23 35 Z" fill="rgba(255,255,255,.34)"/>
+    <path d="M90 22 L97 36 L93 36 L100 49 L80 49 L87 36 L83 36 Z" fill="rgba(255,255,255,.3)"/>
+    <path d="M8 54 L112 54" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="round"/>
   </svg>`;
 
 // одна обложка (книга, композиция или курс)
