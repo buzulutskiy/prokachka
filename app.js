@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-concept-v1", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 12";
+const APP_VERSION = "2026.08.03 · 13";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -991,7 +991,7 @@ function renderHome() {
       </div>
       <div class="chips">
         <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
-        <span class="chip">✦ <b>${open}</b> из ${ach.length}</span>
+        <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b> из ${ach.length} ${plural(ach.length, "награда", "награды", "наград")}</button>
       </div>
       <button class="cta ${!gistReady() ? "locked" : doneToday ? "done" : ""}" id="ctaBtn" type="button">
         ${!gistReady()
@@ -1007,6 +1007,11 @@ function renderHome() {
     if (!gistReady()) { openSettingsSheet(); return; }
     selectedDate = todayStr();
     openLogSheet();
+  });
+
+  $("#achChip").addEventListener("click", () => {
+    tab = "ach"; cfg.tab = tab; saveCfg();
+    render();
   });
   setupRail();
 }
@@ -1090,10 +1095,16 @@ function updateHeroInfo() {
     <h2>${esc(piece().name)}</h2>
     <p>𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%</p>`;
 
-  const chips = $(".chips");
-  if (chips) chips.innerHTML = `
-    <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
-    <span class="chip">✦ <b>${open}</b> из ${ach.length}</span>`;
+  const chipBox = $(".chips");
+  if (chipBox) {
+    chipBox.innerHTML = `
+      <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
+      <button class="chip tap" id="achChip" type="button">🏆 <b>${open}</b> из ${ach.length} ${plural(ach.length, "награда", "награды", "наград")}</button>`;
+    $("#achChip").addEventListener("click", () => {
+      tab = "ach"; cfg.tab = tab; saveCfg();
+      render();
+    });
+  }
 
   const cta = $("#ctaBtn");
   if (cta) {
@@ -1299,7 +1310,8 @@ function renderAch() {
 
   $("#view").innerHTML = `
     <div class="ach-top">
-      <div class="ach-count"><b>${open}</b><span>из ${ach.length} открыто</span></div>
+      <div class="ach-title">${isBook() ? "📖 " + esc(data.book.book.title) : isPastel() ? "🎨 " + esc(course().name) : "🎹 " + esc(piece().name)}</div>
+      <div class="ach-count"><b>${open}</b><span>из ${ach.length} наград открыто</span></div>
       <div class="ach-progress"><i style="width:${open / ach.length * 100}%"></i></div>
       ${next ? `<div style="font-size:0.86rem;color:var(--muted)">Ближайшее: ${next.icon} <b style="color:var(--ink)">${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
     </div>
