@@ -1,4 +1,4 @@
-const CACHE = "prokachka-v29";
+const CACHE = "prokachka-v30";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -18,8 +18,14 @@ self.addEventListener("fetch", (e) => {
   if (url.origin !== location.origin) return;        // GitHub API — только сеть
   if (url.pathname.endsWith("version.json")) return; // проверка версии — всегда из сети
 
+  // на iOS сеть тоже ходит через кэш Safari — просим свежую копию явно
+  const fresh = (() => {
+    try { return new Request(e.request.url, { cache: "reload", credentials: "same-origin" }); }
+    catch { return e.request; }
+  })();
+
   e.respondWith(
-    fetch(e.request)
+    fetch(fresh)
       .then((r) => {
         const copy = r.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
