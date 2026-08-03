@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 16";
+const APP_VERSION = "2026.08.03 · 17";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1327,16 +1327,16 @@ function lineChartHTML(points) {
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         <defs>
           <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="rgba(94,231,155,0.32)"/>
-            <stop offset="100%" stop-color="rgba(94,231,155,0)"/>
+            <stop offset="0%" stop-color="rgba(255,201,77,0.35)"/>
+            <stop offset="100%" stop-color="rgba(255,201,77,0)"/>
           </linearGradient>
         </defs>
         <line x1="${padX}" y1="${bottom + 2}" x2="${W - padX}" y2="${bottom + 2}" stroke="rgba(255,255,255,0.08)"/>
         <path d="${area}" fill="url(#lineFill)"/>
-        <path d="${path}" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${path}" fill="none" stroke="#ffc94d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         ${pts.map((p, i) => (i % dotEvery === 0 || p.today) ? `
           <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.today ? 5 : 3.5}"
-            fill="${p.value ? "#4ade80" : "#2a2438"}" stroke="${p.today ? "#fff" : "#4ade80"}" stroke-width="${p.today ? 2 : 1.4}"
+            fill="${p.value ? "#ffc94d" : "#2a2438"}" stroke="${p.today ? "#fff" : "#ffc94d"}" stroke-width="${p.today ? 2 : 1.4}"
             opacity="${p.future ? 0.35 : 1}"/>` : "").join("")}
       </svg>
       <div class="wl-days" style="grid-template-columns: repeat(${n}, 1fr)">
