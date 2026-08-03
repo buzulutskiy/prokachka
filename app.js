@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-concept-v1", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 7";
+const APP_VERSION = "2026.08.03 · 8";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1552,6 +1552,16 @@ function rollDice(except) {
   }, 1000);
 }
 
+// что реально видит браузер — помогает понять, откуда берётся отступ снизу
+function diagLine() {
+  const bar = document.querySelector(".tabbar");
+  const r = bar ? bar.getBoundingClientRect() : null;
+  const safe = getComputedStyle(document.documentElement).getPropertyValue("--safe-b").trim() || "0px";
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "standalone" : "браузер";
+  return `${standalone} · окно ${Math.round(innerWidth)}×${Math.round(innerHeight)} · экран ${screen.width}×${screen.height}` +
+    `<br>таббар ${r ? Math.round(r.height) : "?"}px, снизу ${r ? Math.round(innerHeight - r.bottom) : "?"}px · safe-area ${safe}`;
+}
+
 async function forceUpdate() {
   toast("Обновляю…");
   try {
@@ -1581,7 +1591,8 @@ function openSettingsSheet() {
         <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
-      <div class="version">Версия ${APP_VERSION}</div>` : `
+      <div class="version">Версия ${APP_VERSION}</div>
+      <div class="diag">${diagLine()}</div>` : `
       <div class="info-note">
         Подключи <b>GitHub Gist</b>, чтобы прогресс жил на всех устройствах.<br>
         Токен: <a href="https://github.com/settings/tokens/new?description=%D0%9F%D1%80%D0%BE%D0%BA%D0%B0%D1%87%D0%BA%D0%B0&scopes=gist" target="_blank" rel="noopener">classic со scope gist</a>
@@ -1592,7 +1603,8 @@ function openSettingsSheet() {
         <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
-      <div class="version">Версия ${APP_VERSION}</div>`}`);
+      <div class="version">Версия ${APP_VERSION}</div>
+      <div class="diag">${diagLine()}</div>`}`);
 
   $("#sClose").addEventListener("click", closeSheet);
   $("#sUpdate").addEventListener("click", forceUpdate);

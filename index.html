@@ -27,6 +27,7 @@
       --red: #f87171;
     }
 
+    :root { --safe-b: env(safe-area-inset-bottom, 0px); }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body { margin: 0; }
     html { height: 100%; }
@@ -424,10 +425,10 @@
       transform: translateX(-50%);
       width: min(460px, 100%);
       display: grid; grid-template-columns: repeat(4, 1fr);
-      background: rgba(20, 17, 28, 0.94);
+      background: rgba(23, 20, 31, 0.98);
       backdrop-filter: blur(14px);
       border-top: 1px solid var(--line);
-      padding: 7px 10px max(8px, calc(env(safe-area-inset-bottom) - 12px));
+      padding: 6px 10px max(6px, calc(env(safe-area-inset-bottom) * 0.26));
       z-index: 20;
     }
     /* страховка: закрывает полосу под таббаром, если система оставляет запас */
@@ -436,11 +437,11 @@
       position: absolute;
       left: 0; right: 0; top: 100%;
       height: 80px;
-      background: rgba(20, 17, 28, 0.94);
+      background: rgba(23, 20, 31, 0.98);
     }
     .tabbar button {
-      display: grid; justify-items: center; gap: 3px;
-      padding: 5px 0; border-radius: 12px;
+      display: grid; justify-items: center; gap: 2px;
+      padding: 3px 0; border-radius: 12px;
       color: var(--dim); font-size: 0.68rem; font-weight: 700;
     }
     .tabbar button i { font-style: normal; font-size: 1.15rem; }
@@ -547,6 +548,15 @@
     }
     .info-note a { color: var(--violet); }
     .info-note b { color: var(--ink); }
+
+    .diag {
+      margin-top: 6px;
+      text-align: center;
+      font-size: 0.68rem;
+      color: var(--dim);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.4;
+    }
 
     .version {
       margin-top: 14px;
