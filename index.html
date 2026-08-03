@@ -221,16 +221,20 @@
     }
 
     .ring-wrap { display: grid; place-items: center; position: relative; }
-    .ring { transform: rotate(-90deg); width: clamp(76px, 11.5vh, 106px); height: auto; }
-    .ring circle { fill: none; stroke-width: 9; stroke-linecap: round; }
+    .ring { transform: rotate(-90deg); width: clamp(88px, 13vh, 116px); height: auto; }
+    .ring circle { fill: none; stroke-width: 7; stroke-linecap: round; }
     .ring .bg { stroke: rgba(255, 255, 255, 0.07); }
     .ring .fg { stroke: url(#grad); transition: stroke-dasharray 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
     .ring-txt {
       position: absolute;
       display: grid; justify-items: center; gap: 1px;
     }
-    .ring-txt b { font-size: clamp(1.25rem, 3.6vh, 1.6rem); font-weight: 850; line-height: 1; letter-spacing: -0.02em; }
-    .ring-txt span { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+    .ring-txt b {
+      font-size: clamp(1.35rem, 3.4vh, 1.72rem);
+      font-weight: 850; line-height: 1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
 
     .hero-title { text-align: center; display: grid; gap: 4px; }
     .hero-title h2 { margin: 0; font-size: clamp(0.98rem, 1.9vh, 1.14rem); font-weight: 800; line-height: 1.18; }

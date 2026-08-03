@@ -869,10 +869,7 @@ function ringHTML(pct) {
         <circle class="bg" cx="64" cy="64" r="${r}"></circle>
         ${pct > 0 ? `<circle class="fg" cx="64" cy="64" r="${r}" stroke-dasharray="${on.toFixed(1)} ${c.toFixed(1)}"></circle>` : ""}
       </svg>
-      <div class="ring-txt">
-        <b>${Math.round(pct)}%</b>
-        <span>${isBook() ? "прочитано" : isPastel() ? "курса" : "разобрано"}</span>
-      </div>
+      <div class="ring-txt"><b>${Math.round(pct)}%</b></div>
     </div>`;
 }
 
