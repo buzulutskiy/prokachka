@@ -191,7 +191,15 @@
     .smears i:nth-child(3) { height: 55%; background: linear-gradient(180deg, #8ad6c0, rgba(138,214,192,0)); }
     .smears i:nth-child(4) { height: 84%; background: linear-gradient(180deg, #a99cf9, rgba(169,156,249,0)); }
     .cv-author { font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
-    .cv-title { font-size: clamp(0.95rem, 3.6vw, 1.24rem); font-weight: 800; line-height: 1.12; }
+    .cv-title {
+      font-size: clamp(0.95rem, 3.6vw, 1.24rem);
+      font-weight: 800;
+      line-height: 1.12;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
     .cv-sub { font-size: 0.68rem; color: var(--muted); margin-top: 5px; }
     .cv-mark { font-size: 1.6rem; opacity: 0.9; }
 

@@ -132,14 +132,20 @@ function migrate(obj) {
   if (obj.piano) {
     // старая схема: одна композиция в piano.piece
     if (obj.piano.piece && !obj.piano.pieces) {
-      base.piano.pieces[0] = Object.assign({}, DEFAULT_PIECES[0], obj.piano.piece, { id: "bwv853" });
+      // из старой схемы берём только число тактов — название и автор у нас свои
+      const bars = Number(obj.piano.piece.bars);
+      base.piano.pieces[0] = Object.assign({}, DEFAULT_PIECES[0],
+        bars > 0 && bars <= 2000 ? { bars } : {}, { id: "bwv853" });
       base.piano.entries = (obj.piano.entries || []).map(e => ({ ...e, pieceId: e.pieceId || "bwv853" }));
     } else {
       if (Array.isArray(obj.piano.pieces) && obj.piano.pieces.length) {
         // сохраняем пользовательские правки, но гарантируем наличие зашитых пьес
         base.piano.pieces = DEFAULT_PIECES.map(def => {
           const saved = obj.piano.pieces.find(p => p.id === def.id);
-          return saved ? Object.assign({}, def, saved) : { ...def, updatedAt: 0 };
+          // оформление обложки всегда наше, из сохранённого берём правки пользователя
+          return saved
+            ? Object.assign({}, def, saved, { art: def.art, tone: def.tone })
+            : { ...def, updatedAt: 0 };
         });
         for (const extra of obj.piano.pieces) {
           if (!base.piano.pieces.some(p => p.id === extra.id)) base.piano.pieces.push(extra);
