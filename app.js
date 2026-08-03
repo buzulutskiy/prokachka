@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 17";
+const APP_VERSION = "2026.08.03 · 18";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -66,6 +66,7 @@ let pickLessons = [];             // выбранные уроки курса
 let sheetMode = null;             // log | settings
 let pushTimer = null, syncing = false;
 let syncError = "";               // текст последней ошибки синхронизации
+let newVersion = "";              // версия на сервере, если она свежее установленной
 
 // без подключённого гиста данные жили бы только на телефоне — ввод запрещаем
 const gistReady = () => !!(cfg.token && cfg.gistId);
@@ -691,6 +692,16 @@ function syncPickers() {
 function renderBanner() {
   const box = $("#banner");
   if (!box) return;
+
+  if (newVersion) {
+    box.innerHTML = `
+      <div class="warn upd">
+        <span>⬆️ <b>Есть новая версия</b> ${esc(newVersion)} — сейчас установлена ${esc(APP_VERSION)}</span>
+        <button id="bnUpdate" type="button">Обновить</button>
+      </div>`;
+    $("#bnUpdate").addEventListener("click", forceUpdate);
+    return;
+  }
 
   if (!gistReady()) {
     box.innerHTML = `
@@ -2260,6 +2271,19 @@ function bindFreezeUI() {
     }));
 }
 
+// сравниваем свою версию с той, что лежит на сервере
+async function checkForUpdate() {
+  try {
+    const r = await fetch("version.json?ts=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.version && j.version !== APP_VERSION) {
+      newVersion = j.version;
+      renderBanner();
+    }
+  } catch {}
+}
+
 async function forceUpdate() {
   toast("Обновляю…");
   try {
@@ -2444,10 +2468,12 @@ function init() {
   window.addEventListener("orientationchange", () => setTimeout(syncTabHeight, 200));
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) { if (selectedDate > todayStr()) selectedDate = todayStr(); syncNow(false); render(); }
+    if (!document.hidden) {
+      checkForUpdate(); if (selectedDate > todayStr()) selectedDate = todayStr(); syncNow(false); render(); }
   });
 
   render();
+  checkForUpdate();
   if (cfg.token && cfg.gistId) { setSyncDot("ok"); syncNow(false); }
 
 

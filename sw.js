@@ -1,4 +1,4 @@
-const CACHE = "prokachka-v17";
+const CACHE = "prokachka-v18";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -15,7 +15,8 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (url.origin !== location.origin) return; // GitHub API — только сеть
+  if (url.origin !== location.origin) return;        // GitHub API — только сеть
+  if (url.pathname.endsWith("version.json")) return; // проверка версии — всегда из сети
 
   e.respondWith(
     fetch(e.request)
