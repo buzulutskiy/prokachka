@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 31";
+const APP_VERSION = "2026.08.03 · 32";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2333,10 +2333,10 @@ function rangeStats(from, to) {
   const days = new Set([...piano, ...bookList, ...pastel].map(e => e.date)).size;
   const tracks = new Set([
     ...(piano.length ? ["piano"] : []),
-    ...(book.length ? ["book"] : []),
+    ...(bookList.length ? ["book"] : []),
     ...(pastel.length ? ["pastel"] : [])
   ]);
-  return { days, bars, pages, lessons, tracks, entries: piano.length + book.length + pastel.length };
+  return { days, bars, pages, lessons, tracks, entries: piano.length + bookList.length + pastel.length };
 }
 
 // границы текущего периода — вся неделя или весь месяц
@@ -3247,6 +3247,7 @@ async function checkForUpdate() {
     if (j.version && j.version !== APP_VERSION) {
       newVersion = j.version;
       renderBanner();
+      maybeAutoUpdate();
     }
   } catch {}
 }
@@ -3257,24 +3258,41 @@ async function forceUpdate() {
   if (btn) { btn.textContent = "Обновляю…"; btn.disabled = true; }
   toast("Обновляю приложение…");
 
-  try {
-    if ("serviceWorker" in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    }
-    if (window.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-    // главное для iOS: заставить браузер перекачать сами файлы, а не отдать их из своего кэша
-    await Promise.all(["index.html", "app.js", "sw.js", "manifest.webmanifest"].map(
-      f => fetch(f, { cache: "reload" }).catch(() => {})
-    ));
-  } catch {}
+  const cleanup = (async () => {
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      // главное для iOS: заставить браузер перекачать сами файлы, а не отдать их из своего кэша
+      await Promise.all(["index.html", "app.js", "sw.js", "manifest.webmanifest"].map(
+        f => fetch(f, { cache: "reload" }).catch(() => {})
+      ));
+    } catch {}
+  })();
+
+  // если что-то из этого зависнет — на iOS такое бывает, — всё равно перезагружаемся
+  await Promise.race([cleanup, new Promise(r => setTimeout(r, 2500))]);
 
   // метка версии уходит и в адрес страницы, и в адрес скрипта — тогда старый app.js подхватить неоткуда
-  const url = location.origin + location.pathname + "?v=" + Date.now();
+  const url = location.origin + location.pathname + "?v=" + encodeURIComponent(newVersion || Date.now());
   location.replace(url);
+  // страховка: если standalone проигнорировал replace, пробуем обычным переходом
+  setTimeout(() => { location.href = url; }, 1200);
+}
+
+// новая версия при запуске ставится сама: одна попытка за сессию, дальше остаётся баннер
+function maybeAutoUpdate() {
+  if (!newVersion || sheetMode) return;
+  try {
+    if (sessionStorage.getItem("keiko-autoupd") === newVersion) return;
+    sessionStorage.setItem("keiko-autoupd", newVersion);
+  } catch { return; }
+  forceUpdate();
 }
 
 function openAboutSheet() {
