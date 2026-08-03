@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-concept-v1", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 9";
+const APP_VERSION = "2026.08.03 · 12";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -63,6 +63,10 @@ let pickPage = 0;
 let pickLessons = [];             // выбранные уроки курса
 let sheetMode = null;             // log | settings
 let pushTimer = null, syncing = false;
+let syncError = "";               // текст последней ошибки синхронизации
+
+// без подключённого гиста данные жили бы только на телефоне — ввод запрещаем
+const gistReady = () => !!(cfg.token && cfg.gistId);
 
 const $ = (s) => document.querySelector(s);
 
@@ -544,6 +548,7 @@ function currentSpans() {
 }
 
 function saveEntry() {
+  if (!gistReady()) { closeSheet(); openSettingsSheet(); return; }
   const existing = entryFor(selectedDate);
   const beforeDone = new Set(achState().filter(a => a.done).map(a => a.id));
   const before = curStats();
@@ -648,8 +653,36 @@ function syncPickers() {
 
 /* ══════════ Рендер ══════════ */
 
+function renderBanner() {
+  const box = $("#banner");
+  if (!box) return;
+
+  if (!gistReady()) {
+    box.innerHTML = `
+      <div class="warn">
+        <span>🔒 <b>Синхронизация не подключена.</b> Записи отключены, чтобы прогресс не остался только на этом устройстве.</span>
+        <button id="bnConnect" type="button">Подключить</button>
+      </div>`;
+    $("#bnConnect").addEventListener("click", openSettingsSheet);
+    return;
+  }
+
+  if (syncError) {
+    box.innerHTML = `
+      <div class="warn err">
+        <span>⚠️ <b>Данные сохранены локально</b>, но не ушли в гист: ${esc(syncError)}</span>
+        <button id="bnRetry" type="button">Повторить</button>
+      </div>`;
+    $("#bnRetry").addEventListener("click", () => syncNow(true));
+    return;
+  }
+
+  box.innerHTML = "";
+}
+
 function render() {
   renderSeg();
+  renderBanner();
   renderTabbar();
   // главная всегда влезает в экран, остальные вкладки скроллятся внутри себя
   $("#view").className = tab === "home" ? "fixed" : "scrolls";
@@ -695,14 +728,48 @@ function overview() {
 
   data.active = save; data.piano.activePiece = savePiece;
 
-  // три оси графика — по хобби целиком
-  const axes = [
-    { key: "piano",  label: "Пианино", icon: "🎹", pct: pianoTotal ? pianoDone / pianoTotal * 100 : 0 },
-    { key: "book",   label: "Чтение",  icon: "📖", pct: b.pct },
-    { key: "pastel", label: "Пастель", icon: "🎨", pct: c.pct }
+  // накопление за всё время: сколько дней занимался каждым хобби
+  const daysOf = (list, since) => new Set(
+    list.filter(e => !e.deleted && (!since || e.date >= since)).map(e => e.date)
+  ).size;
+  const act = {
+    piano: daysOf(data.piano.entries),
+    book: daysOf(data.book.entries),
+    pastel: daysOf(data.pastel.entries)
+  };
+  const monthAgo = dateStr(new Date(Date.now() - 29 * 864e5));
+  const recent = {
+    piano: daysOf(data.piano.entries, monthAgo),
+    book: daysOf(data.book.entries, monthAgo),
+    pastel: daysOf(data.pastel.entries, monthAgo)
+  };
+  const actMax = Math.max(act.piano, act.book, act.pastel);
+
+  // прогресс по текущим материалам (пианино — среднее по всем пьесам)
+  const prog = {
+    piano: pianoTotal ? pianoDone / pianoTotal * 100 : 0,
+    book: b.pct,
+    pastel: c.pct
+  };
+
+  const meta = [
+    { key: "piano",  label: "Пианино", icon: "🎹" },
+    { key: "book",   label: "Чтение",  icon: "📖" },
+    { key: "pastel", label: "Пастель", icon: "🎨" }
   ];
 
-  return { axes, items };
+  // оси: в режиме активности лидер = 100%, остальные — доля от него
+  const axes = meta.map(m => ({
+    ...m,
+    pct: actMax ? act[m.key] / actMax * 100 : 0,
+    days: act[m.key],
+    progress: prog[m.key],
+    caption: act[m.key] + " " + plural(act[m.key], "день", "дня", "дней")
+  }));
+
+  const doneCount = items.filter(i => i.pct >= 100).length;
+  const totalDays = daysOf([...data.piano.entries, ...data.book.entries, ...data.pastel.entries]);
+  return { axes, items, act, recent, actMax, doneCount, totalDays };
 }
 
 // радар: многоугольник по осям хобби
@@ -734,7 +801,7 @@ function radarHTML(axes) {
       <text x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anchor}"
         fill="#8f89a3" font-size="11" font-weight="700">${esc(a.label)}</text>
       <text x="${x.toFixed(1)}" y="${(y + dy + 14).toFixed(1)}" text-anchor="${anchor}"
-        fill="#f2eefb" font-size="11" font-weight="850">${Math.round(a.pct)}%</text>`;
+        fill="#f2eefb" font-size="11" font-weight="850">${esc(a.caption != null ? a.caption : Math.round(a.pct) + "%")}</text>`;
   }).join("");
 
   // высота подгоняется под реальные подписи, чтобы не было пустот
@@ -751,28 +818,36 @@ function radarHTML(axes) {
 
 function renderOverview() {
   const o = overview();
-  const weak = o.axes.slice().sort((x, y) => x.pct - y.pct)[0];
-  const strong = o.axes.slice().sort((x, y) => y.pct - x.pct)[0];
+  const sorted = o.axes.slice().sort((x, y) => y.pct - x.pct);
+  const strong = sorted[0], weak = sorted[sorted.length - 1];
+
+  const note = o.actMax
+    ? `Больше всего занятий — ${strong.icon} <b>${esc(strong.label)}</b> (${strong.days} ${plural(strong.days, "день", "дня", "дней")}), меньше всего ${weak.icon} <b>${esc(weak.label)}</b> (${weak.days})`
+    : "Отметь первое занятие — и график оживёт";
 
   $("#view").innerHTML = `
     <div class="panel">
       <h3>Баланс развития</h3>
       ${radarHTML(o.axes)}
-      <div class="balance-note">
-        ${strong.pct > 0
-          ? `Сильнее всего — ${strong.icon} <b>${esc(strong.label)}</b> (${Math.round(strong.pct)}%), проседает ${weak.icon} <b>${esc(weak.label)}</b> (${Math.round(weak.pct)}%)`
-          : "Отметь первое занятие — и график оживёт"}
+      <div class="balance-note">${note}</div>
+      <div class="recent">
+        За последний месяц:
+        ${o.axes.map(a => `<span>${a.icon} <b>${o.recent[a.key]}</b></span>`).join("")}
+      </div>
+      <div class="balance-hint">
+        График копит <b>дни занятий</b> за всё время и не обнуляется, когда дочитаешь книгу или разберёшь пьесу.
+        Шкала относительная: у самого частого хобби — полная.
       </div>
     </div>
 
     <div class="panel">
-      <h3>По направлениям</h3>
+      <h3>Что сейчас в работе${o.doneCount ? ` · пройдено ${o.doneCount}` : ""}</h3>
       <div class="dirs">
         ${o.items.map(a => `
           <div class="dir">
             <span class="di">${a.icon}</span>
             <span class="dn">${esc(a.full)}<i>${esc(a.note)}</i></span>
-            <span class="dp">${Math.round(a.pct)}%</span>
+            <span class="dp ${a.pct >= 100 ? "done" : ""}">${a.pct >= 100 ? "✓" : Math.round(a.pct) + "%"}</span>
           </div>`).join("")}
       </div>
     </div>`;
@@ -900,7 +975,8 @@ function renderHome() {
   const seed = todayStr().split("-").reduce((a, x) => a + Number(x), 0);
   const list = isBook() ? NUDGES_BOOK : isPastel() ? NUDGES_PASTEL : NUDGES_PIANO;
   let nudge;
-  if (doneToday) nudge = `Сегодня отмечено. Возвращайся завтра — серия станет <b>${st + 1}</b>`;
+  if (!gistReady()) nudge = `Записи включатся после подключения <b>GitHub Gist</b> — так прогресс не потеряется`;
+  else if (doneToday) nudge = `Сегодня отмечено. Возвращайся завтра — серия станет <b>${st + 1}</b>`;
   else if (st >= 2) nudge = `Серия <b>${st} ${plural(st, "день", "дня", "дней")}</b> — не разрывай её сегодня`;
   else if (st === 1) nudge = `Вчера занимался — сделай сегодня, и <b>серия пойдёт</b>`;
   else nudge = list[seed % list.length];
@@ -917,13 +993,21 @@ function renderHome() {
         <span class="chip ${st > 0 ? "hot" : ""}">🔥 <b>${st}</b> ${plural(st, "день", "дня", "дней")} подряд</span>
         <span class="chip">✦ <b>${open}</b> из ${ach.length}</span>
       </div>
-      <button class="cta ${doneToday ? "done" : ""}" id="ctaBtn" type="button">
-        ${doneToday ? '<span class="cta-ok">✅ Сегодня отмечено</span><span class="cta-add">дополнить</span>' : (isBook() ? "📖 Отметить чтение" : isPastel() ? "🎨 Отметить урок" : "🎹 Отметить занятие")}
+      <button class="cta ${!gistReady() ? "locked" : doneToday ? "done" : ""}" id="ctaBtn" type="button">
+        ${!gistReady()
+          ? "🔒 Подключить синхронизацию"
+          : doneToday
+            ? '<span class="cta-ok">✅ Сегодня отмечено</span><span class="cta-add">дополнить</span>'
+            : (isBook() ? "📖 Отметить чтение" : isPastel() ? "🎨 Отметить урок" : "🎹 Отметить занятие")}
       </button>
       <div class="nudge">${nudge}</div>
     </div>`;
 
-  $("#ctaBtn").addEventListener("click", () => { selectedDate = todayStr(); openLogSheet(); });
+  $("#ctaBtn").addEventListener("click", () => {
+    if (!gistReady()) { openSettingsSheet(); return; }
+    selectedDate = todayStr();
+    openLogSheet();
+  });
   setupRail();
 }
 
@@ -1290,6 +1374,11 @@ function closeSheet() {
 }
 
 function openLogSheet() {
+  if (!gistReady()) {
+    toast("Сначала подключи синхронизацию — иначе записи могут потеряться");
+    openSettingsSheet();
+    return;
+  }
   sheetMode = "log";
   syncPickers();
   const existing = entryFor(selectedDate);
@@ -1646,8 +1735,11 @@ async function connectGitHub(token) {
       setSyncDot("ok"); toast("Гист создан");
     }
     closeSheet();
+    syncError = "";
+    render();
   } catch (e) {
     cfg.token = ""; saveCfg(); setSyncDot("err");
+    render();
     toast(e.message || "Не получилось");
   }
 }
@@ -1692,11 +1784,14 @@ async function syncNow(manual) {
       if (!pr.ok) throw new Error("Не сохранилось");
     }
     cfg.lastSync = now(); saveCfg(); setSyncDot("ok");
+    syncError = "";
     syncPickers(); render();
     if (manual) toast("Синхронизировано");
   } catch (e) {
     setSyncDot("err");
-    if (manual) toast(e.message || "Не получилось");
+    syncError = e.message || "нет связи с GitHub";
+    renderBanner();
+    if (manual) toast(syncError);
   } finally { syncing = false; }
 }
 
