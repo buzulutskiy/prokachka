@@ -713,6 +713,24 @@
     .cheer.fact .cheer-ic { background: linear-gradient(140deg, #ffd977, #ffb44d); }
     .cheer.fact p { max-width: 330px; font-size: 0.92rem; }
 
+    .dig {
+      width: 100%;
+      background: var(--card-2); border: 1px solid var(--line);
+      border-radius: 13px; padding: 12px 13px;
+      text-align: left; display: grid; gap: 7px;
+    }
+    .dig-head {
+      font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gold);
+    }
+    .dig-item { font-size: 0.86rem; color: var(--muted); line-height: 1.4; }
+    .dig-item::before { content: "→ "; color: var(--dim); }
+
+    .cheer-dig {
+      display: block; margin-top: 12px;
+      font-size: 0.84rem; color: var(--gold); line-height: 1.4;
+    }
+
     /* входной список материалов на вкладке наград */
     .mat-list { display: grid; gap: 9px; }
     .mat-card {

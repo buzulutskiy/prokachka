@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 20";
+const APP_VERSION = "2026.08.03 · 21";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -54,7 +54,7 @@ const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ── Состояние ── */
 let data = null;
-let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null };
+let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
 let tab = "home";                 // home | progress | ach | overview
@@ -583,6 +583,338 @@ function currentSpans() {
     : [normSpan(pickHand, pickFrom, pickTo)];
 }
 
+/* ══════════ Карточки знаний ══════════
+   Смысловые заметки о материале. Открываются по мере занятий:
+   на 1, 3, 6, 10 и 15-й день с этой пьесой, книгой или курсом. */
+
+const FACT_STEPS = [1, 3, 6, 10, 15];
+
+const FACTS = {
+  bwv853: [
+    { t: "Это песня плача, а не упражнение",
+      x: "Правая рука ведёт долгую мелодию, левая ровно шагает под ней аккордами — так в те времена писали арии, то есть вокальные номера. Получается, что инструмент здесь поёт: слушатели XVIII века узнавали в этом плач по умершему. Когда играешь, полезно представлять не пальцы, а голос, которому не хватает дыхания.",
+      more: ["Послушай запись Святослава Рихтера и Гленна Гульда подряд — у одного это молитва, у другого разговор",
+             "Сравни с арией «Erbarme dich» из «Страстей по Матфею» — та же интонация мольбы"] },
+    { t: "Тональность выбрана не случайно",
+      x: "Во времена Баха у каждой тональности была репутация, как у цвета: одни считались светлыми и праздничными, другие — скорбными. Эта — из самых мрачных, её брали, когда речь шла о смерти и утешении. Бах служил в церкви и писал на этом языке всерьёз, а не для красоты.",
+      more: ["Погугли «барочная теория аффектов» — там про то, как музыка кодировала эмоции",
+             "У Баха в «Страстях» те же приёмы: услышишь знакомые повороты"] },
+    { t: "Зачем после плача идёт фуга",
+      x: "Каждая прелюдия в сборнике идёт в паре с фугой — пьесой, где одна короткая мелодия по очереди вступает в нескольких голосах и они сплетаются. Если прелюдия — это личное горе, то фуга рядом с ней — строгий порядок, в который это горе укладывается. Пара читается как путь: от «мне больно» к «мир всё равно устроен разумно».",
+      more: ["Послушай фугу этой же пары сразу после прелюдии — эффект контраста слышен мгновенно",
+             "Фильм «Хорошо темперированный клавир» Кэрол Райс — про то, как эти пары устроены"] },
+    { t: "Сборник задумывался как учебник",
+      x: "На обложке Бах написал, что это «для пользы и употребления жаждущей учиться музыкальной молодёжи». Ранняя версия этой прелюдии попала в нотную тетрадь, которую он вёл для старшего сына. То есть вещь, которую ты разбираешь, изначально домашняя, учебная — и это снимает лишний пиетет.",
+      more: ["Найди «Нотную тетрадь Вильгельма Фридемана Баха» — там простые пьесы, с которых начинали его дети",
+             "Книга Филиппа Спитты о Бахе — классическая биография, если захочется контекста"] },
+    { t: "Двадцать четыре двери",
+      x: "До Баха инструменты настраивали так, что часть тональностей звучала откровенно фальшиво, и композиторы их обходили. Появился новый способ настройки — и Бах написал 24 пары пьес, по одной на каждую возможную тональность, просто чтобы доказать: теперь играть можно везде. Твоя прелюдия — восьмая дверь из этих двадцати четырёх.",
+      more: ["Послушай пары №1 до мажор и №8 подряд — разница характера слышна даже без теории",
+             "Поищи ролики про «равномерную темперацию» — там на пальцах объясняют, почему раньше было нельзя"] }
+  ],
+  more: [
+    { t: "Музыка знает финал, а герои нет",
+      x: "Фильм «До свидания, мальчики!» — про последнее мирное лето трёх выпускников у моря, 1936 год. Они дурачатся и строят планы, а зритель знает, что через несколько лет будет война и вернутся не все. Эта пьеса звучит как воспоминание: светлая мелодия, спетая тем, кто уже знает, чем всё кончилось.",
+      more: ["Посмотри сам фильм Михаила Калика 1964 года — он короткий и очень тихий",
+             "Повесть Бориса Балтера, по которой снят фильм, называется так же"] },
+    { t: "Музыка говорит за героев",
+      x: "Таривердиев не любил, когда музыка повторяет то, что и так видно на экране. Его принцип: она должна произносить то, о чём персонажи молчат. Поэтому в кадре просто идут по берегу, а в музыке — нежность и предчувствие потери, которых никто вслух не скажет.",
+      more: ["Послушай его музыку к «Иронии судьбы» и «Семнадцати мгновениям» — тот же приём в других обстоятельствах",
+             "Книга Таривердиева «Я просто живу» — он там сам объясняет, как работал с режиссёрами"] },
+    { t: "Море — это обещание",
+      x: "Море в фильме не пейзаж, а образ юности: горизонт, свобода, всё впереди. Название пьесы соединяет мальчиков и море — и в этом вся мысль: бесконечность, обещанная в семнадцать лет, и очень короткая жизнь, которая за ней последовала.",
+      more: ["Посмотри финал фильма — там закадровый текст о судьбах героев",
+             "Рядом стоит «Человек идёт за солнцем» того же режиссёра с музыкой Таривердиева"] },
+    { t: "Пустоты больше, чем нот",
+      x: "В пьесе намеренно мало звуков: между фразами воздух, ничего лишнего. Таривердиев считал, что недосказанность действует сильнее наполненности — слушатель сам дописывает то, что не сыграно. Поэтому играть её нужно не быстрее, чем дышится.",
+      more: ["Послушай, как её играет Алексей Гориболь — он держит паузы дольше, чем кажется возможным",
+             "Сравни с «Ноктюрнами» Шопена: там тоже смысл живёт в остановках"] },
+    { t: "Она пережила свой фильм",
+      x: "Музыка из кино обычно живёт, пока идёт картина. Эта прелюдия ушла в концертный репертуар и играется отдельно — значит, смысл в ней держится без кадра: не нужно знать сюжет, чтобы услышать прощание.",
+      more: ["Альбом «Двое в городе» — фортепианный Таривердиев без фильмов",
+             "Поищи концерты Гориболя с программами из его киномузыки"] }
+  ],
+  book: [
+    { t: "Почему книга так называется",
+      x: "Снег, выпавший на ещё зелёную траву, живёт считанные часы — и в этом соединении несоединимого весь Норштейн. Он всю книгу говорит об одном: искусство начинается там, где поймано мгновение, которое вот-вот исчезнет.",
+      more: ["Обрати внимание, как он разбирает стихи Басё — там та же мысль про мгновение",
+             "Посмотри «Сказку сказок» после этой главы — увидишь книгу в кадрах"] },
+    { t: "Это книга про то, как смотреть",
+      x: "Она собрана из лекций, и учит не рисованию, а взгляду: как смотреть на дерево, лицо, свет, чтобы действительно увидеть. Норштейн уверен, что без насмотренности в живописи и поэзии мультипликатор остаётся ремесленником — и это касается любого дела.",
+      more: ["Он часто ссылается на Рембрандта и Ван Гога — стоит открыть их альбомы параллельно",
+             "Лекции Норштейна есть на видео, интонация та же, что в книге"] },
+    { t: "Туман — это состояние, а не погода",
+      x: "«Ёжик в тумане» вовсе не про ёжика. Это про то, как страшно и притягательно идти туда, где привычные ориентиры исчезли: туман стирает знакомый мир, и герой видит его заново. Поэтому фильм оказался понятнее взрослым, чем детям.",
+      more: ["Пересмотри мультфильм после этой главы — многое читается иначе",
+             "Сказки Сергея Козлова, по которым он снят, стоит прочитать целиком"] },
+    { t: "Волчок и вечное яблоко",
+      x: "В «Сказке сказок» собрана личная память: двор, война, довоенное танго, ушедшие и вернувшиеся. Волчок из колыбельной здесь не страшилка, а душа, которая подглядывает за чужим счастьем и уносит то единственное, что нельзя удержать.",
+      more: ["Посмотри «Сказку сказок» — её признавали лучшим мультфильмом всех времён на опросах критиков",
+             "Стихи Назыма Хикмета, откуда взято название, тоже про память"] },
+    { t: "Пауза важнее движения",
+      x: "Норштейн постоянно возвращается к ритму: пустой кадр и остановка значат столько же, сколько действие. Как в музыке — смысл возникает в тишине между фразами, а не в непрерывном шевелении. Это, пожалуй, главный совет книги для любого занятия.",
+      more: ["Посмотри «Цаплю и журавля» — фильм целиком построен на паузах",
+             "У Тарковского в «Запечатлённом времени» та же мысль про ритм"] }
+  ],
+  pastel: [
+    { t: "Почему Левитан взялся за пастель",
+      x: "После поездки в Европу в начале 1890-х Левитан познакомился с французской пастелью и стал работать ей сам. Его пастели конца 1890-х называют переломными для русской пейзажной живописи: именно там его чувство цвета и настроения раскрылось особенно тонко.",
+      more: ["Пастели Левитана есть в Третьяковке — стоит посмотреть вживую, репродукции их убивают",
+             "«Осенний пейзаж с церковью» — хороший пример, есть в онлайн-коллекции музея"] },
+    { t: "Русский пейзаж пишет состояние, а не вид",
+      x: "Левитан и его круг рисовали не «красивое место», а тишину, сырость, ожидание, грусть. Пастель для этого идеальна: она не даёт резких границ, цвет ложится дымкой, и сумерки, туман, тающий снег получаются сами собой.",
+      more: ["Посмотри «Над вечным покоем» и «Владимирку» — там настроение важнее сюжета",
+             "Чехов писал о Левитане как о брате по интонации: их стоит читать и смотреть вместе"] },
+    { t: "Скорость решает",
+      x: "Пастелью работают быстро: не нужно ждать, пока высохнет слой. Увидел свет — записал. Для пейзажиста это способ поймать те десять минут заката, которые маслом не успеть, отсюда ощущение живого воздуха в таких работах.",
+      more: ["Попробуй сделать один и тот же вид утром и вечером — разница в цвете удивляет",
+             "Посмотри пастельные этюды Дега: он довёл быструю работу до уровня живописи"] },
+    { t: "Иногда материал выбирают обстоятельства",
+      x: "У Серова пастель была исключением: свою «Бабу с лошадью» он сделал ей просто потому, что на морозе масляные краски застывали. Хорошее напоминание, что выбор материала часто диктует не идея, а погода, время и то, что под рукой.",
+      more: ["Посмотри «Бабу с лошадью» — по ней видно, как быстро работал Серов",
+             "Сравни его пастель с портретами маслом: другая рука, другой темп"] },
+    { t: "Хрупкость как часть смысла",
+      x: "Пастель держится на трении: почти чистый пигмент лежит на поверхности и осыпается от касания. Работу нельзя тронуть пальцем, её возят под стеклом. Материал сам напоминает о том, о чём писал русский пейзаж, — красота недолговечна.",
+      more: ["Почитай, как музеи хранят пастели: их почти не возят на выставки",
+             "Про фиксатив: лак для волос не годится — он желтит работу со временем"] }
+  ]
+};
+
+// карточки текущего материала: сколько открыто по числу дней занятий
+function factsState() {
+  const key = isBook() ? "book" : isPastel() ? "pastel" : piece().id;
+  const list = FACTS[key] || [];
+  const days = new Set(entries().map(e => e.date)).size;
+  return list.map((f, i) => ({ ...f, id: key + ":" + i, need: FACT_STEPS[i], open: days >= FACT_STEPS[i] }));
+}
+
+function fmtRange(from, to) {
+  const f = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+  return from === to ? f.format(fromStr(from)) : `${f.format(fromStr(from))} — ${f.format(fromStr(to))}`;
+}
+
+function goalProgress() {
+  const from = dateStr(mondayOf(new Date()));
+  const days = new Set(
+    [...data.piano.entries, ...data.book.entries, ...data.pastel.entries]
+      .filter(e => !e.deleted && e.date >= from).map(e => e.date)
+  ).size;
+  const goal = data.weekGoal || 4;
+  return { days, goal, left: Math.max(0, goal - days), done: days >= goal, pct: Math.min(100, days / goal * 100) };
+}
+
+function weeklyHistory(weeks = 12) {
+  const days = new Set(entries().map(e => e.date));
+  const out = [];
+  const monday = mondayOf(new Date());
+  for (let i = weeks - 1; i >= 0; i--) {
+    const start = new Date(monday); start.setDate(start.getDate() - i * 7);
+    let n = 0;
+    for (let d = 0; d < 7; d++) {
+      const cur = new Date(start); cur.setDate(cur.getDate() + d);
+      if (cur > new Date()) break;
+      if (days.has(dateStr(cur))) n++;
+    }
+    out.push({ start: dateStr(start), days: n });
+  }
+  return out;
+}
+
+function weekSummary(offset = 0) {
+  const monday = mondayOf(new Date());
+  monday.setDate(monday.getDate() - offset * 7);
+  const from = dateStr(monday);
+  const end = new Date(monday); end.setDate(end.getDate() + 6);
+  const to = dateStr(end);
+  const inWeek = (e) => !e.deleted && e.date >= from && e.date <= to;
+
+  const pianoEntries = data.piano.entries.filter(inWeek);
+  let bars = 0;
+  for (const e of pianoEntries) for (const sp of e.spans || []) bars += sp.to - sp.from + 1;
+
+  const bookEntries = data.book.entries.filter(inWeek);
+  let pagesFrom = null, pagesTo = null;
+  for (const e of data.book.entries.filter(e => !e.deleted && e.date < from)) pagesFrom = Math.max(pagesFrom || 0, e.page || 0);
+  for (const e of bookEntries) pagesTo = Math.max(pagesTo || 0, e.page || 0);
+  const base = Math.max(pagesFrom || 0, data.book.book.startPage || 0);
+  const pages = pagesTo ? Math.max(0, pagesTo - base) : 0;
+
+  const pastelEntries = data.pastel.entries.filter(inWeek);
+  let lessons = 0;
+  for (const e of pastelEntries) lessons += (e.lessons || []).length;
+
+  const allDays = new Set([...pianoEntries, ...bookEntries, ...pastelEntries].map(e => e.date));
+  return { from, to, days: allDays.size, bars, pages, lessons };
+}
+
+function currentMaterial() {
+  if (isBook()) {
+    const b = data.book.book, s = bookStats();
+    return { icon: "📖", title: b.title, sub: `${s.page} из ${s.pages} стр.`, pct: s.pct };
+  }
+  if (isPastel()) {
+    const c = course(), s = pastelStats();
+    return { icon: "🎨", title: c.name, sub: `${s.done} из ${s.lessons} уроков`, pct: s.pct };
+  }
+  const p = piece(), s = pianoStats();
+  return { icon: "🎹", title: p.name, sub: `${s.touchedR + s.touchedL} из ${s.bars * 2} тактов-рук`, pct: s.pct };
+}
+
+function archiveCurrent() {
+  const m = currentMaterial();
+  const days = new Set(entries().map(e => e.date)).size;
+
+  if (!confirm(`Отправить «${m.title}» в архив?\n\nПройдено: ${Math.round(m.pct)}%, ${days} ${plural(days, "день", "дня", "дней")} занятий.\nЗаписи и вклад в баланс останутся.`)) return;
+
+  data.archive.push({
+    id: uid(), track: data.active, icon: m.icon, title: m.title,
+    sub: m.sub, pct: Math.round(m.pct), days,
+    finishedAt: todayStr(), createdAt: now(), updatedAt: now()
+  });
+
+  if (isBook()) {
+    const title = prompt("Какую книгу читаешь теперь?", "");
+    if (title === null || !title.trim()) { data.archive.pop(); return; }
+    const pagesStr = prompt("Сколько в ней страниц?", "300");
+    const pages = Math.round(Number((pagesStr || "").replace(",", ".")));
+    if (!pages || pages < 1) { data.archive.pop(); toast("Не понял число страниц"); return; }
+    data.book.book = {
+      id: uid(), title: title.trim(), author: "", volume: "",
+      pages, startPage: 0, chapters: [{ name: "Начало", from: 1 }], updatedAt: now()
+    };
+  } else if (isPastel()) {
+    const name = prompt("Какой курс проходишь теперь?", "");
+    if (name === null || !name.trim()) { data.archive.pop(); return; }
+    const cnt = Math.round(Number((prompt("Сколько в нём уроков?", "10") || "").replace(",", ".")));
+    if (!cnt || cnt < 1) { data.archive.pop(); toast("Не понял число уроков"); return; }
+    data.pastel.course = {
+      id: uid(), name: name.trim(), author: "",
+      lessons: Array.from({ length: cnt }, (_, i) => ({ title: `Урок ${i + 1}`, dur: 600 })),
+      updatedAt: now()
+    };
+  } else {
+    const p = piece();
+    p.archived = true; p.updatedAt = now();
+    const rest = data.piano.pieces.filter(x => !x.archived);
+    if (!rest.length) {
+      const name = prompt("Какую вещь разбираешь теперь?", "");
+      if (name === null || !name.trim()) { p.archived = false; data.archive.pop(); return; }
+      const bars = Math.round(Number((prompt("Сколько в ней тактов?", "40") || "").replace(",", ".")));
+      if (!bars || bars < 1) { p.archived = false; data.archive.pop(); toast("Не понял число тактов"); return; }
+      const np = { id: uid(), author: "", name: name.trim(), bars, art: "keys", tone: "violet", updatedAt: now() };
+      data.piano.pieces.push(np);
+      data.piano.activePiece = np.id;
+    } else {
+      data.piano.activePiece = rest[0].id;
+    }
+  }
+
+  saveData(); schedulePush(); syncPickers(); render();
+  toast(`«${m.title}» в архиве`);
+}
+
+function freezeUI() {
+  const list = (data.freezes || []).filter(f => !f.deleted)
+    .sort((a, b) => a.from < b.from ? 1 : -1);
+  const today = todayStr();
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">🌴 <b>Пауза</b> — дни отпуска или болезни, которые не рвут серию</div>
+      <div class="fz-form">
+        <input class="note-input" id="fzFrom" type="date" value="${today}" max="2100-01-01">
+        <input class="note-input" id="fzTo" type="date" value="${today}" max="2100-01-01">
+        <button class="btn" id="fzAdd" type="button">Добавить</button>
+      </div>
+      ${list.length ? `<div class="fz-list">${list.map(f => `
+        <div class="fz-item ${today >= f.from && today <= f.to ? "now" : ""}">
+          <span>${fmtRange(f.from, f.to)}${today >= f.from && today <= f.to ? " · идёт сейчас" : ""}</span>
+          <button data-fz="${f.id}" type="button">✕</button>
+        </div>`).join("")}</div>` : `<div class="fz-empty">Пока пауз нет</div>`}
+    </div>`;
+}
+
+function bindFreezeUI() {
+  const add = $("#fzAdd");
+  if (!add) return;
+  add.addEventListener("click", () => {
+    const from = $("#fzFrom").value, to = $("#fzTo").value;
+    if (!from || !to) { toast("Укажи даты"); return; }
+    const a = from <= to ? from : to, b = from <= to ? to : from;
+    data.freezes.push({ id: uid(), from: a, to: b, createdAt: now(), updatedAt: now() });
+    saveData(); schedulePush();
+    toast("Пауза добавлена — серия не прервётся");
+    openSettingsSheet();
+    render();
+  });
+
+  document.querySelectorAll("[data-fz]").forEach(b =>
+    b.addEventListener("click", () => {
+      const f = data.freezes.find(x => x.id === b.dataset.fz);
+      if (!f) return;
+      f.deleted = true; f.updatedAt = now();
+      saveData(); schedulePush();
+      openSettingsSheet();
+      render();
+    }));
+}
+
+function goalUI() {
+  const g = goalProgress();
+  return `
+    <div class="freeze">
+      <div class="fz-head">🎯 <b>Цель на неделю</b> — сколько дней заниматься чем угодно из трёх</div>
+      <div class="goal-pick">
+        ${[2, 3, 4, 5, 6, 7].map(n =>
+          `<button class="gbtn ${g.goal === n ? "on" : ""}" data-goal="${n}" type="button">${n}</button>`).join("")}
+      </div>
+      <div class="fz-empty">Сейчас: <b>${g.days} из ${g.goal}</b> на этой неделе</div>
+    </div>`;
+}
+
+function bindGoalUI() {
+  document.querySelectorAll("[data-goal]").forEach(b =>
+    b.addEventListener("click", () => {
+      data.weekGoal = Number(b.dataset.goal);
+      saveData(); schedulePush();
+      openSettingsSheet();
+      render();
+      toast(`Цель: ${data.weekGoal} ${plural(data.weekGoal, "день", "дня", "дней")} в неделю`);
+    }));
+}
+
+function archiveUI() {
+  const cur = currentMaterial();
+  const list = (data.archive || []).filter(a => !a.deleted)
+    .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short", year: "numeric" });
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">📦 <b>Материалы</b> — пройденное уходит в архив, дни занятий остаются</div>
+      <div class="fz-empty">Сейчас: <b>${esc(cur.title)}</b> · ${Math.round(cur.pct)}%</div>
+      <button class="btn" id="archBtn" type="button">Отправить в архив и начать новое</button>
+      ${list.length ? `<div class="fz-list">${list.map(a => `
+        <div class="fz-item">
+          <span>${a.icon} ${esc(a.title)} · ${a.pct}% · ${fmt.format(fromStr(a.finishedAt)).replace(" г.", "")}</span>
+        </div>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+function bindArchiveUI() {
+  const b = $("#archBtn");
+  if (b) b.addEventListener("click", () => { closeSheet(); archiveCurrent(); });
+}
+
+function diagLine() {
+  const bar = document.querySelector(".tabbar");
+  const r = bar ? bar.getBoundingClientRect() : null;
+  const safe = getComputedStyle(document.documentElement).getPropertyValue("--safe-b").trim() || "0px";
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "standalone" : "браузер";
+  return `${standalone} · окно ${Math.round(innerWidth)}×${Math.round(innerHeight)} · экран ${screen.width}×${screen.height}` +
+    `<br>таббар ${r ? Math.round(r.height) : "?"}px, снизу ${r ? Math.round(innerHeight - r.bottom) : "?"}px · safe-area ${safe}`;
+}
+
 function saveEntry() {
   if (!gistReady()) { closeSheet(); openSettingsSheet(); return; }
   const existing = entryFor(selectedDate);
@@ -636,7 +968,8 @@ function showNextOverlay() {
 function showFact(f) {
   $("#cheerIc").textContent = "💡";
   $("#cheerTitle").textContent = f.t;
-  $("#cheerText").textContent = f.x;
+  $("#cheerText").innerHTML = esc(f.x) +
+    ((f.more || []).length ? `<span class="cheer-dig">Копнуть глубже: ${esc(f.more[0])}</span>` : "");
   $("#cheerOk").textContent = overlayQueue.length ? "Дальше" : "Интересно!";
   $("#cheer").classList.add("show", "fact");
 }
@@ -768,232 +1101,22 @@ function renderSeg() {
   if (tab === "progress" || tab === "ach") { box.style.display = "none"; box.innerHTML = ""; return; }
   box.style.display = "";
 
-  $("#seg").innerHTML = [["piano", "🎹", "Пианино"], ["book", "📖", "Чтение"], ["pastel", "🎨", "Пастель"]]
-    .map(([id, ic, nm]) => `<button data-t="${id}" class="${data.active === id ? "on" : ""}" type="button"><span>${ic}</span>${nm}</button>`).join("");
+  box.innerHTML = [["piano", "🎹", "Пианино"], ["book", "📖", "Чтение"], ["pastel", "🎨", "Пастель"]]
+    .map(([id, ic, nm]) =>
+      `<button data-t="${id}" class="${data.active === id ? "on" : ""}" type="button"><span>${ic}</span>${nm}</button>`).join("");
+
   document.querySelectorAll("#seg button").forEach(b =>
-    b.addEventListener("click", () => switchTrack(b.dataset.t)));
+    b.addEventListener("click", () => {
+      // лента едет к первому материалу этого хобби
+      if (railApi) {
+        const i = railApi.indexOfTrack(b.dataset.t);
+        if (i >= 0) { railApi.centerOn(i, true); return; }
+      }
+      switchTrack(b.dataset.t);
+    }));
 }
 
-/* ══════════ ОБЗОР: общий опыт по всем хобби ══════════ */
-
-function overview() {
-  const save = data.active, savePiece = data.piano.activePiece;
-
-  // детализация по материалам (для списка направлений)
-  const items = [];
-  let pianoDone = 0, pianoTotal = 0;
-  for (const p of data.piano.pieces.filter(x => !x.archived)) {
-    data.active = "piano"; data.piano.activePiece = p.id;
-    const s = pianoStats();
-    pianoDone += s.touchedR + s.touchedL;
-    pianoTotal += s.bars * 2;
-    items.push({ track: "piano", icon: "🎹", full: p.name, pct: s.pct,
-      note: `${s.touchedR + s.touchedL} из ${s.bars * 2} тактов-рук` });
-  }
-
-  data.active = "book";
-  const b = bookStats();
-  items.push({ track: "book", icon: "📖", full: data.book.book.title, pct: b.pct,
-    note: `${b.page} из ${b.pages} страниц` });
-
-  data.active = "pastel";
-  const c = pastelStats();
-  items.push({ track: "pastel", icon: "🎨", full: course().name, pct: c.pct,
-    note: `${c.done} из ${c.lessons} уроков · ${c.minutes} мин` });
-
-  data.active = save; data.piano.activePiece = savePiece;
-
-  // накопление за всё время: сколько дней занимался каждым хобби
-  const daysOf = (list, since) => new Set(
-    list.filter(e => !e.deleted && (!since || e.date >= since)).map(e => e.date)
-  ).size;
-  const act = {
-    piano: daysOf(data.piano.entries),
-    book: daysOf(data.book.entries),
-    pastel: daysOf(data.pastel.entries)
-  };
-  const monthAgo = dateStr(new Date(Date.now() - 29 * 864e5));
-  const recent = {
-    piano: daysOf(data.piano.entries, monthAgo),
-    book: daysOf(data.book.entries, monthAgo),
-    pastel: daysOf(data.pastel.entries, monthAgo)
-  };
-  const actMax = Math.max(act.piano, act.book, act.pastel);
-
-  // прогресс по текущим материалам (пианино — среднее по всем пьесам)
-  const prog = {
-    piano: pianoTotal ? pianoDone / pianoTotal * 100 : 0,
-    book: b.pct,
-    pastel: c.pct
-  };
-
-  const meta = [
-    { key: "piano",  label: "Пианино", icon: "🎹" },
-    { key: "book",   label: "Чтение",  icon: "📖" },
-    { key: "pastel", label: "Пастель", icon: "🎨" }
-  ];
-
-  // оси: в режиме активности лидер = 100%, остальные — доля от него
-  const axes = meta.map(m => ({
-    ...m,
-    pct: actMax ? act[m.key] / actMax * 100 : 0,
-    days: act[m.key],
-    progress: prog[m.key],
-    caption: act[m.key] + " " + plural(act[m.key], "день", "дня", "дней")
-  }));
-
-  const doneCount = items.filter(i => i.pct >= 100).length;
-  const totalDays = daysOf([...data.piano.entries, ...data.book.entries, ...data.pastel.entries]);
-  return { axes, items, act, recent, actMax, doneCount, totalDays };
-}
-
-// радар: многоугольник по осям хобби
-function radarHTML(axes) {
-  const W = 300, H = 250, cx = W / 2, cy = 112, R = 70;
-  const n = axes.length;
-  const pt = (i, r) => {
-    const ang = -Math.PI / 2 + i * 2 * Math.PI / n;
-    return [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r];
-  };
-  const ring = (r) => axes.map((_, i) => pt(i, r).map(v => v.toFixed(1)).join(",")).join(" ");
-  const shape = axes.map((a, i) => pt(i, Math.max(4, R * Math.min(1, a.pct / 100))).map(v => v.toFixed(1)).join(",")).join(" ");
-
-  const grid = [0.25, 0.5, 0.75, 1].map(k =>
-    `<polygon points="${ring(R * k)}" fill="none" stroke="rgba(255,255,255,${k === 1 ? 0.18 : 0.08})" stroke-width="1"/>`).join("");
-  const spokes = axes.map((_, i) => {
-    const [x, y] = pt(i, R);
-    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.08)"/>`;
-  }).join("");
-  const dots = axes.map((a, i) => {
-    const [x, y] = pt(i, Math.max(4, R * Math.min(1, a.pct / 100)));
-    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="#ffc94d"/>`;
-  }).join("");
-  const labels = axes.map((a, i) => {
-    const [x, y] = pt(i, R + 24);
-    const anchor = x < cx - 6 ? "end" : x > cx + 6 ? "start" : "middle";
-    const dy = y < cy - 40 ? -6 : y > cy + 40 ? 8 : 0;  // верх/низ не наезжают на фигуру
-    return `
-      <text x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anchor}"
-        fill="#8f89a3" font-size="11" font-weight="700">${esc(a.label)}</text>
-      <text x="${x.toFixed(1)}" y="${(y + dy + 14).toFixed(1)}" text-anchor="${anchor}"
-        fill="#f2eefb" font-size="11" font-weight="850">${esc(a.caption != null ? a.caption : Math.round(a.pct) + "%")}</text>`;
-  }).join("");
-
-  // высота подгоняется под реальные подписи, чтобы не было пустот
-  const ys = axes.map((_, i) => pt(i, R + 24)[1]);
-  const bottom = Math.max(...ys, cy + R) + 34;
-
-  return `
-    <svg class="radar" viewBox="0 0 ${W} ${Math.min(H, Math.ceil(bottom))}">
-      ${grid}${spokes}
-      <polygon points="${shape}" fill="rgba(255,201,77,0.22)" stroke="#ffc94d" stroke-width="2" stroke-linejoin="round"/>
-      ${dots}${labels}
-    </svg>`;
-}
-
-function archiveHTML() {
-  const list = (data.archive || []).filter(a => !a.deleted)
-    .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
-  if (!list.length) return "";
-  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", year: "numeric" });
-
-  return `
-    <div class="panel">
-      <h3>Архив · пройдено ${list.length}</h3>
-      <div class="dirs">
-        ${list.map(a => `
-          <div class="dir">
-            <span class="di">${a.icon}</span>
-            <span class="dn">${esc(a.title)}<i>${a.days} ${plural(a.days, "день", "дня", "дней")} · ${fmt.format(fromStr(a.finishedAt)).replace(" г.", "")}</i></span>
-            <span class="dp done">${a.pct >= 100 ? "✓" : a.pct + "%"}</span>
-          </div>`).join("")}
-      </div>
-    </div>`;
-}
-
-// баланс развития: три оси по накопленным дням занятий
-function balanceHTML() {
-  const o = overview();
-  const sorted = o.axes.slice().sort((x, y) => y.pct - x.pct);
-  const strong = sorted[0], weak = sorted[sorted.length - 1];
-  const note = o.actMax
-    ? `Больше всего занятий — ${strong.icon} <b>${esc(strong.label)}</b> (${strong.days} ${plural(strong.days, "день", "дня", "дней")}), меньше всего ${weak.icon} <b>${esc(weak.label)}</b> (${weak.days})`
-    : "Отметь первое занятие — и график оживёт";
-
-  return `
-    <div class="panel">
-      <h3>Баланс развития</h3>
-      ${radarHTML(o.axes)}
-      <div class="balance-note">${note}</div>
-      <div class="recent">
-        За последний месяц:
-        ${o.axes.map(a => `<span>${a.icon} <b>${o.recent[a.key]}</b></span>`).join("")}
-      </div>
-      <div class="dirs" style="margin-top:14px">
-        ${o.items.map(a => `
-          <div class="dir">
-            <span class="di">${a.icon}</span>
-            <span class="dn">${esc(a.full)}<i>${esc(a.note)}</i></span>
-            <span class="dp ${a.pct >= 100 ? "done" : ""}">${a.pct >= 100 ? "✓" : Math.round(a.pct) + "%"}</span>
-          </div>`).join("")}
-      </div>
-    </div>`;
-}
-
-function renderOverview() {
-  const o = overview();
-  const sorted = o.axes.slice().sort((x, y) => y.pct - x.pct);
-  const strong = sorted[0], weak = sorted[sorted.length - 1];
-
-  const note = o.actMax
-    ? `Больше всего занятий — ${strong.icon} <b>${esc(strong.label)}</b> (${strong.days} ${plural(strong.days, "день", "дня", "дней")}), меньше всего ${weak.icon} <b>${esc(weak.label)}</b> (${weak.days})`
-    : "Отметь первое занятие — и график оживёт";
-
-  const w = weekSummary(0), prev = weekSummary(1);
-  const arrow = (a, b) => a > b ? `<i class="up">▲</i>` : a < b ? `<i class="down">▼</i>` : "";
-  const fmtD = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
-
-  $("#view").innerHTML = `
-    <div class="panel">
-      <h3>Итоги недели · ${fmtD.format(fromStr(w.from))} — ${fmtD.format(fromStr(w.to))}</h3>
-      <div class="stats">
-        <div class="stat"><b>${w.days}/${goalProgress().goal}</b><span>дней из цели</span></div>
-        <div class="stat"><b>${w.bars} ${arrow(w.bars, prev.bars)}</b><span>${plural(w.bars, "такт", "такта", "тактов")}</span></div>
-        <div class="stat"><b>${w.pages + w.lessons ? `${w.pages}/${w.lessons}` : "0/0"}</b><span>страниц / уроков</span></div>
-      </div>
-      <div class="week-cmp">На прошлой неделе: ${prev.days} ${plural(prev.days, "день", "дня", "дней")}, ${prev.bars} ${plural(prev.bars, "такт", "такта", "тактов")}, ${prev.pages} стр., ${prev.lessons} ${plural(prev.lessons, "урок", "урока", "уроков")}</div>
-    </div>
-
-    <div class="panel">
-      <h3>Баланс развития</h3>
-      ${radarHTML(o.axes)}
-      <div class="balance-note">${note}</div>
-      <div class="recent">
-        За последний месяц:
-        ${o.axes.map(a => `<span>${a.icon} <b>${o.recent[a.key]}</b></span>`).join("")}
-      </div>
-      <div class="balance-hint">
-        График копит <b>дни занятий</b> за всё время и не обнуляется, когда дочитаешь книгу или разберёшь пьесу.
-        Шкала относительная: у самого частого хобби — полная.
-      </div>
-    </div>
-
-    ${archiveHTML()}
-
-    <div class="panel">
-      <h3>Что сейчас в работе${o.doneCount ? ` · пройдено ${o.doneCount}` : ""}</h3>
-      <div class="dirs">
-        ${o.items.map(a => `
-          <div class="dir">
-            <span class="di">${a.icon}</span>
-            <span class="dn">${esc(a.full)}<i>${esc(a.note)}</i></span>
-            <span class="dp ${a.pct >= 100 ? "done" : ""}">${a.pct >= 100 ? "✓" : Math.round(a.pct) + "%"}</span>
-          </div>`).join("")}
-      </div>
-    </div>`;
-}
-
-// высота закреплённого таббара — чтобы контент точно не заезжал под него
+// высота закреплённого таббара — чтобы контент не заезжал под него
 function syncTabHeight() {
   const bar = document.querySelector(".tabbar");
   if (!bar) return;
@@ -1037,9 +1160,37 @@ const WAVE_ART = `
   </svg>`;
 
 // одна обложка (книга, композиция или курс)
-function coverHTML(p) {
-  if (isPastel()) {
-    const c = course();
+// все материалы одной лентой: пьесы, книга, курс
+function railItems() {
+  const out = data.piano.pieces.filter(p => !p.archived)
+    .map(p => ({ track: "piano", pieceId: p.id, piece: p }));
+  out.push({ track: "book" });
+  out.push({ track: "pastel" });
+  return out;
+}
+
+function activeRailIndex(items) {
+  const i = items.findIndex(it => it.track === data.active &&
+    (it.track !== "piano" || it.pieceId === data.piano.activePiece));
+  return Math.max(0, i);
+}
+
+// обложка любого материала — не зависит от активного трека
+function coverOf(item) {
+  if (item.track === "book") {
+    const b = data.book.book;
+    return `
+      <div class="cover book">
+        <div><div class="cv-author">${esc(b.author || "")}</div></div>
+        <div class="cv-mark">🦔</div>
+        <div>
+          <div class="cv-title">${esc(b.title)}</div>
+          <div class="cv-sub">${esc(b.volume || "")}</div>
+        </div>
+      </div>`;
+  }
+  if (item.track === "pastel") {
+    const c = data.pastel.course;
     return `
       <div class="cover pastel">
         <div><div class="cv-author">${esc(c.author || "")}</div></div>
@@ -1050,18 +1201,7 @@ function coverHTML(p) {
         </div>
       </div>`;
   }
-  if (isBook()) {
-    const b = data.book.book;
-    return `
-      <div class="cover book">
-        <div><div class="cv-author">${esc(b.author)}</div></div>
-        <div class="cv-mark">🦔</div>
-        <div>
-          <div class="cv-title">${esc(b.title)}</div>
-          <div class="cv-sub">${esc(b.volume || "")}</div>
-        </div>
-      </div>`;
-  }
+  const p = item.piece;
   return `
     <div class="cover piano ${esc(p.tone || "violet")}">
       <div><div class="cv-author">${esc(p.author || "")}</div></div>
@@ -1073,14 +1213,19 @@ function coverHTML(p) {
     </div>`;
 }
 
-// карусель обложек: свайп переключает композицию
+// лента бесконечная: рендерим три копии подряд и незаметно возвращаемся в середину
 function coverRailHTML() {
-  const live = data.piano.pieces.filter(p => !p.archived);
-  const list = isPiano() ? live : [null];
-  const activeIdx = isPiano() ? Math.max(0, live.findIndex(p => p.id === data.piano.activePiece)) : 0;
-  const slides = list.map((p, i) =>
-    `<div class="slot ${i === activeIdx ? "on" : ""}" data-i="${i}">${coverHTML(p)}</div>`).join("");
-  return `<div class="rail" id="rail">${slides}</div>`;
+  const items = railItems();
+  const n = items.length;
+  const idx = activeRailIndex(items);
+  let html = "";
+  for (let copy = 0; copy < 3; copy++) {
+    items.forEach((it, i) => {
+      const on = copy === 1 && i === idx;
+      html += `<div class="slot ${on ? "on" : ""}" data-i="${i}" data-pos="${copy * n + i}">${coverOf(it)}</div>`;
+    });
+  }
+  return `<div class="rail" id="rail">${html}</div>`;
 }
 
 function ringHTML(pct) {
@@ -1143,91 +1288,194 @@ function renderHome() {
 }
 
 /* Карусель: центрируем активную обложку и слушаем свайп */
+let railApi = null;   // доступ к прокрутке ленты извне (сегмент, кубик)
+
 function setupRail() {
   const rail = $("#rail");
   if (!rail) return;
   const slots = [...rail.querySelectorAll(".slot")];
   if (!slots.length) return;
 
-  // боковые поля, чтобы крайние обложки могли встать ровно по центру
+  const items = railItems();
+  const n = items.length;
+
   const pad = Math.max(0, (rail.clientWidth - slots[0].offsetWidth) / 2);
   rail.style.paddingLeft = pad + "px";
   rail.style.paddingRight = pad + "px";
 
-  // позиция центра слота внутри прокручиваемой ленты
-  const centerOfSlot = (s) => {
-    const r = s.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+  const centerOfSlot = (el) => {
+    const r = el.getBoundingClientRect(), rr = rail.getBoundingClientRect();
     return r.left - rr.left + rail.scrollLeft + r.width / 2;
   };
+  const targetFor = (pos) => centerOfSlot(slots[pos]) - rail.clientWidth / 2;
 
-  const centerOn = (i, smooth) => {
-    const slot = slots[i];
-    if (!slot) return;
-    rail.scrollTo({ left: centerOfSlot(slot) - rail.clientWidth / 2, behavior: smooth ? "smooth" : "auto" });
+  const nearestPos = () => {
+    const mid = rail.scrollLeft + rail.clientWidth / 2;
+    let best = 0, bestDist = Infinity;
+    slots.forEach((el, i) => {
+      const d = Math.abs(centerOfSlot(el) - mid);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return best;
   };
 
-  const activeIdx = isBook() ? 0 : data.piano.pieces.filter(p => !p.archived).findIndex(p => p.id === data.piano.activePiece);
-  centerOn(Math.max(0, activeIdx), false);
+  // если ушли в крайнюю копию — мгновенно переносимся в среднюю, шва не видно
+  const normalize = (pos) => {
+    let target = pos;
+    if (pos < n) target = pos + n;
+    else if (pos >= 2 * n) target = pos - n;
+    if (target !== pos) {
+      const delta = targetFor(target) - targetFor(pos);
+      const snap = rail.style.scrollSnapType;
+      rail.style.scrollSnapType = "none";
+      rail.scrollLeft += delta;
+      rail.style.scrollSnapType = snap;
+    }
+    return target;
+  };
 
-  if (isBook() || slots.length < 2) return;
+  let spinning = false;
 
-  // после остановки скролла определяем, какая обложка в центре
-  let t = null;
-  rail.addEventListener("scroll", () => {
-    clearTimeout(t);
-    t = setTimeout(() => {
-      const mid = rail.scrollLeft + rail.clientWidth / 2;
-      let best = 0, bestDist = Infinity;
-      slots.forEach((s, i) => {
-        const d = Math.abs(centerOfSlot(s) - mid);
-        if (d < bestDist) { bestDist = d; best = i; }
-      });
-      slots.forEach((s, i) => s.classList.toggle("on", i === best));
-      const target = data.piano.pieces.filter(p => !p.archived)[best];
-      if (target && target.id !== data.piano.activePiece) switchPiece(target.id);
-    }, 130);
-  }, { passive: true });
+  const settle = () => {
+    if (spinning) return;
+    const pos = normalize(nearestPos());
+    slots.forEach((el, i) => el.classList.toggle("on", i === pos));
+    setActiveMaterial(items[pos % n]);
+  };
 
-  // тап по соседней обложке тоже переключает
-  slots.forEach((s, i) => s.addEventListener("click", () => {
-    if (!s.classList.contains("on")) centerOn(i, true);
+  // ждём настоящей остановки: пока позиция меняется, ничего не трогаем
+  let idleTimer = null;
+  const settleWhenIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      if (spinning) return;
+      const before = rail.scrollLeft;
+      setTimeout(() => {
+        if (spinning) return;
+        if (Math.abs(rail.scrollLeft - before) > 0.5) { settleWhenIdle(); return; }
+        settle();
+      }, 90);
+    }, 110);
+  };
+
+  // программная центровка сразу применяет материал — не ждём событий скролла
+  const centerOn = (pos, smooth) => {
+    if (!slots[pos]) return;
+    clearTimeout(idleTimer);
+    rail.scrollTo({ left: targetFor(pos), behavior: smooth ? "smooth" : "auto" });
+    slots.forEach((el, i) => el.classList.toggle("on", i === pos));
+    setActiveMaterial(items[pos % n]);
+  };
+
+  // кубик: лента разгоняется, прокручивает несколько обложек и плавно тормозит
+  const spinTo = (baseIdx, done) => {
+    if (spinning) return;
+    const cur = nearestPos();
+    let pos = baseIdx + n;
+    while (pos <= cur + 1) pos += n;          // всегда крутим вперёд
+    if (pos >= slots.length) pos -= n;
+
+    const from = rail.scrollLeft;
+    const to = targetFor(pos);
+    if (Math.abs(to - from) < 2) { settle(); done && done(); return; }
+
+    spinning = true;
+    clearTimeout(idleTimer);
+    rail.style.scrollSnapType = "none";
+    rail.style.scrollBehavior = "auto";
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(guard);
+      rail.scrollLeft = to;                    // точная доводка без рывка
+      rail.style.scrollSnapType = "x mandatory";
+      rail.style.scrollBehavior = "";
+      spinning = false;
+      const fixed = normalize(pos);
+      slots.forEach((el, i) => el.classList.toggle("on", i === fixed));
+      setActiveMaterial(items[fixed % n]);
+      done && done();
+    };
+
+    // страховка: если кадры не идут (вкладка в фоне), доводим результат сами
+    const guard = setTimeout(finish, 2200);
+
+    const t0 = performance.now(), dur = 1400;
+    const ease = k => 1 - Math.pow(1 - k, 4);
+    const step = (now) => {
+      if (finished) return;
+      const k = Math.min(1, (now - t0) / dur);
+      rail.scrollLeft = from + (to - from) * ease(k);
+      if (k < 1) requestAnimationFrame(step); else finish();
+    };
+    requestAnimationFrame(step);
+  };
+
+  railApi = {
+    centerOn: (baseIdx, smooth) => centerOn(baseIdx + n, smooth),
+    spinTo,
+    indexOfTrack: (track) => items.findIndex(it => it.track === track),
+    indexOf: (track, pieceId) => items.findIndex(it => it.track === track && (!pieceId || it.pieceId === pieceId))
+  };
+
+  centerOn(activeRailIndex(items) + n, false);
+  if (n < 2) return;
+
+  rail.addEventListener("scroll", settleWhenIdle, { passive: true });
+  if ("onscrollend" in rail) rail.addEventListener("scrollend", () => { if (!spinning) settle(); });
+
+  slots.forEach((el, i) => el.addEventListener("click", () => {
+    if (!el.classList.contains("on")) centerOn(i, true);
   }));
 }
 
-// смена композиции без перерисовки карусели (чтобы не сбить свайп)
-function switchPiece(id) {
-  data.piano.activePiece = id;
+// смена материала без перерисовки ленты
+function setActiveMaterial(item) {
+  if (!item) return;
+  const same = data.active === item.track &&
+    (item.track !== "piano" || data.piano.activePiece === item.pieceId);
+  if (same) return;
+
+  data.active = item.track;
+  if (item.pieceId) data.piano.activePiece = item.pieceId;
+  pending = []; pickLessons = [];
   selectedDate = todayStr();
-  pending = [];
+  syncPickers();
   saveData();
   schedulePush();
-  syncPickers();
   updateHeroInfo();
+  renderSeg();
   renderTabbar();
 }
 
 function updateHeroInfo() {
   const s = curStats();
-  const st = s.streak;
   const doneToday = !!entryFor(todayStr());
-  const ach = achState();
-  const open = ach.filter(a => a.done).length;
 
   const ring = $(".ring-wrap");
   if (ring) ring.outerHTML = ringHTML(s.pct);
 
   const title = $(".hero-title");
   if (title) title.innerHTML = `
-    <h2>${esc(piece().name)}</h2>
-    <p>𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%</p>`;
-
+    <h2>${isBook() ? esc(data.book.book.title) : isPastel() ? esc(course().name) : esc(piece().name)}</h2>
+    <p>${isBook()
+      ? `${esc(s.chapter.name)} · осталось ${stranic(s.pages - s.page)}`
+      : isPastel()
+        ? `${s.done} из ${s.lessons} уроков · ${s.minutes} мин пройдено`
+        : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`}</p>`;
 
   const cta = $("#ctaBtn");
   if (cta) {
-    cta.classList.toggle("done", doneToday);
-    cta.textContent = doneToday ? "✅ Сегодня отмечено · дополнить" : "🎹 Отметить занятие";
+    cta.classList.toggle("locked", !gistReady());
+    cta.classList.toggle("done", gistReady() && doneToday);
+    cta.innerHTML = !gistReady()
+      ? "🔒 Подключить синхронизацию"
+      : doneToday
+        ? '<span class="cta-ok">✅ Сегодня отмечено</span><span class="cta-add">дополнить</span>'
+        : (isBook() ? "📖 Отметить чтение" : isPastel() ? "🎨 Отметить урок" : "🎹 Отметить занятие");
   }
-
 
   const nudge = $(".nudge");
   if (nudge) {
@@ -1237,7 +1485,6 @@ function updateHeroInfo() {
       : "";
   }
 }
-
 function barMap(arr, cls) {
   const bars = piece().bars;
   let cells = "";
@@ -1775,6 +2022,11 @@ function openFactSheet(f) {
       <div class="big open">💡</div>
       <h3>${esc(f.t)}</h3>
       <p style="max-width:340px">${esc(f.x)}</p>
+      ${(f.more || []).length ? `
+        <div class="dig">
+          <div class="dig-head">Копнуть глубже</div>
+          ${f.more.map(m => `<div class="dig-item">${esc(m)}</div>`).join("")}
+        </div>` : ""}
     </div>
     <div class="sheet-actions">
       <button class="btn" id="factClose" type="button">Закрыть</button>
@@ -2033,399 +2285,53 @@ function rollCandidate(exceptName) {
   return { pick: pool[pool.length - 1], all };
 }
 
-function diceReason(c) {
-  if (c.doneToday) return "Сегодня уже отмечено, но никто не мешает повторить";
-  if (c.streak >= 2) return `Серия <b>${c.streak} ${plural(c.streak, "день", "дня", "дней")}</b> — грех прерывать`;
-  if (c.pct === 0) return "Ещё не начато — самое время открыть";
-  if (c.pct < 25) return "Тут пока тонко — самое время подтянуть";
-  if (c.pct >= 75) return "Финал близко — дожать?";
-  return "Ровно то, что нужно сегодня";
-}
+/* ── Встряхивание телефона = бросок кубика ── */
 
-function openDiceSheet() {
-  sheetMode = "dice";
-  openSheet(`
-    <div class="dice-sheet">
-      <div class="dice-face rolling" id="diceFace">🎲</div>
-      <div class="dice-what" id="diceWhat">Бросаем…</div>
-      <div class="dice-why" id="diceWhy">Кубик решает, чем заняться сегодня</div>
-    </div>
-    <div class="sheet-actions" id="diceActions"></div>`);
-  rollDice();
-}
+let shakeReady = false;
+let lastShake = 0;
 
-function rollDice(except) {
-  const { pick, all } = rollCandidate(except);
-  const face = $("#diceFace"), what = $("#diceWhat"), why = $("#diceWhy");
-  if (!face) return;
-
-  face.className = "dice-face rolling";
-  face.textContent = "🎲";
-  what.textContent = "Бросаем…";
-  why.textContent = "Кубик решает, чем заняться сегодня";
-  $("#diceActions").innerHTML = "";
-
-  // перебор вариантов, потом остановка
-  let i = 0;
-  const spin = setInterval(() => {
-    const c = all[i++ % all.length];
-    what.textContent = c.name;
-    face.textContent = c.icon;
-  }, 110);
-
-  setTimeout(() => {
-    clearInterval(spin);
-    face.className = "dice-face landed";
-    face.textContent = pick.icon;
-    what.textContent = pick.name;
-    why.innerHTML = diceReason(pick);
-    $("#diceActions").innerHTML = `
-      <button class="btn gold" id="diceGo" type="button">Погнали!</button>
-      <button class="btn" id="diceAgain" type="button">Бросить ещё раз</button>`;
-
-    $("#diceGo").addEventListener("click", () => {
-      closeSheet();
-      if (pick.track !== data.active) switchTrack(pick.track);
-      if (pick.pieceId && pick.pieceId !== data.piano.activePiece) {
-        data.piano.activePiece = pick.pieceId;
-        saveData(); schedulePush(); syncPickers();
-      }
-      tab = "home"; cfg.tab = tab; saveCfg();
-      render();
-      toast(`Сегодня — ${pick.name}`);
-    });
-    $("#diceAgain").addEventListener("click", () => rollDice(pick.name));
-  }, 1000);
-}
-
-// что реально видит браузер — помогает понять, откуда берётся отступ снизу
-function diagLine() {
-  const bar = document.querySelector(".tabbar");
-  const r = bar ? bar.getBoundingClientRect() : null;
-  const safe = getComputedStyle(document.documentElement).getPropertyValue("--safe-b").trim() || "0px";
-  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "standalone" : "браузер";
-  return `${standalone} · окно ${Math.round(innerWidth)}×${Math.round(innerHeight)} · экран ${screen.width}×${screen.height}` +
-    `<br>таббар ${r ? Math.round(r.height) : "?"}px, снизу ${r ? Math.round(innerHeight - r.bottom) : "?"}px · safe-area ${safe}`;
-}
-
-/* ── История по неделям и итоги недели ── */
-
-// последние N недель: сколько дней занимался активным материалом
-function weeklyHistory(weeks = 12) {
-  const days = new Set(entries().map(e => e.date));
-  const out = [];
-  const monday = mondayOf(new Date());
-  for (let i = weeks - 1; i >= 0; i--) {
-    const start = new Date(monday); start.setDate(start.getDate() - i * 7);
-    let n = 0;
-    for (let d = 0; d < 7; d++) {
-      const cur = new Date(start); cur.setDate(cur.getDate() + d);
-      if (cur > new Date()) break;
-      if (days.has(dateStr(cur))) n++;
-    }
-    out.push({ start: dateStr(start), days: n });
+function handleShake(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a) return;
+  const power = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+  const now = Date.now();
+  if (power > 32 && now - lastShake > 1800) {
+    lastShake = now;
+    if (document.querySelector("#sheet")?.classList.contains("show")) return;
+    if (navigator.vibrate) navigator.vibrate(30);
+    rollDice();
   }
-  return out;
 }
 
-// прогресс общей недельной цели: любой день с любым занятием
-function goalProgress() {
-  const from = dateStr(mondayOf(new Date()));
-  const days = new Set(
-    [...data.piano.entries, ...data.book.entries, ...data.pastel.entries]
-      .filter(e => !e.deleted && e.date >= from).map(e => e.date)
-  ).size;
-  const goal = data.weekGoal || 4;
-  return { days, goal, left: Math.max(0, goal - days), done: days >= goal, pct: Math.min(100, days / goal * 100) };
-}
-
-// что сделано за неделю по всем хобби (и как это по сравнению с прошлой)
-function weekSummary(offset = 0) {
-  const monday = mondayOf(new Date());
-  monday.setDate(monday.getDate() - offset * 7);
-  const from = dateStr(monday);
-  const end = new Date(monday); end.setDate(end.getDate() + 6);
-  const to = dateStr(end);
-  const inWeek = (e) => !e.deleted && e.date >= from && e.date <= to;
-
-  const pianoEntries = data.piano.entries.filter(inWeek);
-  let bars = 0;
-  for (const e of pianoEntries) for (const sp of e.spans || []) bars += sp.to - sp.from + 1;
-
-  const bookEntries = data.book.entries.filter(inWeek);
-  let pagesFrom = null, pagesTo = null;
-  for (const e of data.book.entries.filter(e => !e.deleted && e.date < from)) pagesFrom = Math.max(pagesFrom || 0, e.page || 0);
-  for (const e of bookEntries) pagesTo = Math.max(pagesTo || 0, e.page || 0);
-  const base = Math.max(pagesFrom || 0, data.book.book.startPage || 0);
-  const pages = pagesTo ? Math.max(0, pagesTo - base) : 0;
-
-  const pastelEntries = data.pastel.entries.filter(inWeek);
-  let lessons = 0;
-  for (const e of pastelEntries) lessons += (e.lessons || []).length;
-
-  const allDays = new Set([...pianoEntries, ...bookEntries, ...pastelEntries].map(e => e.date));
-  return { from, to, days: allDays.size, bars, pages, lessons };
-}
-
-
-/* ══════════ Карточки знаний ══════════
-   Открываются по мере занятий: 1, 3, 6, 10 и 15-й день с этим материалом. */
-
-const FACT_STEPS = [1, 3, 6, 10, 15];
-
-const FACTS = {
-  bwv853: [
-    { t: "Одна музыка, две записи",
-      x: "Прелюдия написана в es-moll — шесть бемолей, а фуга той же пары записана в dis-moll — шесть диезов. На клавиатуре это одни и те же клавиши, но глазами читается совершенно по-разному. Во всём первом томе «Хорошо темперированного клавира» такая пара только одна." },
-    { t: "Сначала была тетрадь для сына",
-      x: "Прелюдия существовала раньше самого сборника: её ранняя версия попала в «Нотную тетрадь Вильгельма Фридемана Баха» — учебную книжку, которую Бах составлял для старшего сына. То, что ты разбираешь, начиналось как домашнее упражнение внутри семьи." },
-    { t: "Фуга-предвестник «Искусства фуги»",
-      x: "Фуга этой пары — трёхголосная и считается одной из самых строго выстроенных во всём томе: Бах пускает тему в каноне и в увеличении, растягивая её вдвое. Те же приёмы он развернёт через двадцать с лишним лет в «Искусстве фуги»." },
-    { t: "Тональность, которой боялись",
-      x: "В барокко тональности с шестью знаками почти не использовали: при старых способах настройки они звучали фальшиво. Первый том ХТК, собранный около 1722 года, и был доказательством, что при хорошей темперации играть можно во всех двадцати четырёх." },
-    { t: "Фуга-переселенец",
-      x: "Исследователи считают, что фугу Бах не сочинил заново, а перенёс из ранней работы в d-moll, подняв на полтона в dis-moll. Для него это была обычная практика: хороший материал переезжал из пьесы в пьесу, меняя тональность и назначение." }
-  ],
-  more: [
-    { t: "Музыка из «До свидания, мальчики!»",
-      x: "«Мальчики и море» — прелюдия из фильма Михаила Калика 1964 года по повести Бориса Балтера. История о трёх выпускниках последнего мирного лета: через несколько месяцев начнётся война, и зритель знает это с первых кадров, а герои — нет." },
-    { t: "Не первая встреча с режиссёром",
-      x: "С Каликом Таривердиев работал и раньше — над картиной «Человек идёт за солнцем» (1961). Режиссёр искал не сопровождение, а второй голос повествования, и композитор писал музыку, которая договаривает то, чего нет в диалогах." },
-    { t: "Сто тридцать семь фильмов",
-      x: "Таривердиев работал в кино около сорока лет, его музыка звучит в 137 картинах. При этом он всю жизнь считал себя прежде всего автором камерной музыки, а не киношным композитором." },
-    { t: "Дебют в двадцать семь",
-      x: "В кинематограф он пришёл в 1958 году с фильмом «Юность наших отцов» — задолго до «Иронии судьбы» и «Семнадцати мгновений весны», которые сделали его имя известным каждому." },
-    { t: "Вторая жизнь на концертной сцене",
-      x: "Сегодня фортепианную музыку Таривердиева играет пианист Алексей Гориболь — во многом благодаря ему эти пьесы вышли из категории «музыка из кино» и звучат в залах как самостоятельный репертуар." }
-  ],
-  book: [
-    { t: "Книга выросла из лекций",
-      x: "«Снег на траве» — не мемуары, а записанные беседы: лекции на Высших курсах сценаристов и режиссёров и в Японии, публиковавшиеся в журнале «Искусство кино» в 1999–2004 годах. Отсюда живая устная интонация — Норштейн будто говорит с тобой, а не пишет." },
-    { t: "Про искусство вообще, а не про мультики",
-      x: "Разговор идёт о том, как вообще рождается художественный образ — через живопись, поэзию, кино, наблюдение за жизнью. Анимация здесь скорее повод: способ разобрать, из чего сделано искусство." },
-    { t: "Туман из стекла и света",
-      x: "«Ёжик в тумане» снят методом перекладки: перед камерой ставилось несколько слоёв стекла, между ними двигались вырезанные фигуры. Знаменитый туман — не компьютер, а тончайшая калька, которую поднимали и опускали, меняя плотность белого." },
-    { t: "Сто эскизов одного ежа",
-      x: "Образ Ёжика рождался мучительно: было больше сотни эскизов, и нужный вариант нашла художница Франческа Ярбусова, жена Норштейна. По его собственным словам, случилось это после криков и сердечных капель." },
-    { t: "Госпремия за три сказки",
-      x: "В 1979 году Норштейн, оператор Александр Жуковский и художница Франческа Ярбусова получили Государственную премию СССР сразу за три фильма: «Лиса и заяц», «Цапля и журавль» и «Ёжик в тумане»." }
-  ],
-  pastel: [
-    { t: "И материал, и техника сразу",
-      x: "Словом «пастель» называют и мелки, и способ работы ими. Разновидностей три: сухая, масляная и восковая — и ведут они себя настолько по-разному, что переход с одной на другую похож на смену инструмента." },
-    { t: "Первая, кто рисовала только пастелью",
-      x: "Розальба Каррьера — венецианская художница XVIII века — первой сделала пастель своим единственным материалом. После её портретов техника вошла в моду по всей Европе: быстрая, лёгкая, идеально передающая кожу и ткань." },
-    { t: "Любимый материал Дега",
-      x: "В XIX веке пастелью работали Делакруа, Милле, Мане, Ренуар, Редон — и особенно Эдгар Дега. Его балерины сделаны именно ей: Дега наслаивал пастель, пропаривал бумагу, растирал пальцами и довёл технику до уровня живописи." },
-    { t: "Почти чистый пигмент",
-      x: "В пастельном мелке связующего минимум — по сути это спрессованный пигмент. Поэтому цвет получается таким плотным и бархатным, а работы, если их не тереть, держат яркость столетиями." },
-    { t: "Чем нельзя фиксировать",
-      x: "Готовый рисунок закрепляют фиксативом, иначе пигмент осыпается. Лак для волос, который часто советуют, для этого не годится: он не бескислотный и со временем желтит и разъедает работу." }
-  ]
-};
-
-// карточки текущего материала: сколько открыто по числу дней занятий
-function factsState() {
-  const key = isBook() ? "book" : isPastel() ? "pastel" : piece().id;
-  const list = FACTS[key] || [];
-  const days = new Set(entries().map(e => e.date)).size;
-  return list.map((f, i) => ({ ...f, id: key + ":" + i, need: FACT_STEPS[i], open: days >= FACT_STEPS[i] }));
-}
-
-/* ── Архив: пройденный материал уходит в историю, дни занятий остаются ── */
-
-function currentMaterial() {
-  if (isBook()) {
-    const b = data.book.book, s = bookStats();
-    return { icon: "📖", title: b.title, sub: `${s.page} из ${s.pages} стр.`, pct: s.pct };
-  }
-  if (isPastel()) {
-    const c = course(), s = pastelStats();
-    return { icon: "🎨", title: c.name, sub: `${s.done} из ${s.lessons} уроков`, pct: s.pct };
-  }
-  const p = piece(), s = pianoStats();
-  return { icon: "🎹", title: p.name, sub: `${s.touchedR + s.touchedL} из ${s.bars * 2} тактов-рук`, pct: s.pct };
-}
-
-function archiveCurrent() {
-  const m = currentMaterial();
-  const days = new Set(entries().map(e => e.date)).size;
-
-  if (!confirm(`Отправить «${m.title}» в архив?\n\nПройдено: ${Math.round(m.pct)}%, ${days} ${plural(days, "день", "дня", "дней")} занятий.\nЗаписи и вклад в баланс останутся.`)) return;
-
-  data.archive.push({
-    id: uid(), track: data.active, icon: m.icon, title: m.title,
-    sub: m.sub, pct: Math.round(m.pct), days,
-    finishedAt: todayStr(), createdAt: now(), updatedAt: now()
-  });
-
-  if (isBook()) {
-    const title = prompt("Какую книгу читаешь теперь?", "");
-    if (title === null || !title.trim()) { data.archive.pop(); return; }
-    const pagesStr = prompt("Сколько в ней страниц?", "300");
-    const pages = Math.round(Number((pagesStr || "").replace(",", ".")));
-    if (!pages || pages < 1) { data.archive.pop(); toast("Не понял число страниц"); return; }
-    data.book.book = {
-      id: uid(), title: title.trim(), author: "", volume: "",
-      pages, startPage: 0, chapters: [{ name: "Начало", from: 1 }], updatedAt: now()
-    };
-  } else if (isPastel()) {
-    const name = prompt("Какой курс проходишь теперь?", "");
-    if (name === null || !name.trim()) { data.archive.pop(); return; }
-    const cnt = Math.round(Number((prompt("Сколько в нём уроков?", "10") || "").replace(",", ".")));
-    if (!cnt || cnt < 1) { data.archive.pop(); toast("Не понял число уроков"); return; }
-    data.pastel.course = {
-      id: uid(), name: name.trim(), author: "",
-      lessons: Array.from({ length: cnt }, (_, i) => ({ title: `Урок ${i + 1}`, dur: 600 })),
-      updatedAt: now()
-    };
-  } else {
-    const p = piece();
-    p.archived = true; p.updatedAt = now();
-    const rest = data.piano.pieces.filter(x => !x.archived);
-    if (!rest.length) {
-      const name = prompt("Какую вещь разбираешь теперь?", "");
-      if (name === null || !name.trim()) { p.archived = false; data.archive.pop(); return; }
-      const bars = Math.round(Number((prompt("Сколько в ней тактов?", "40") || "").replace(",", ".")));
-      if (!bars || bars < 1) { p.archived = false; data.archive.pop(); toast("Не понял число тактов"); return; }
-      const np = { id: uid(), author: "", name: name.trim(), bars, art: "keys", tone: "violet", updatedAt: now() };
-      data.piano.pieces.push(np);
-      data.piano.activePiece = np.id;
-    } else {
-      data.piano.activePiece = rest[0].id;
-    }
-  }
-
-  saveData(); schedulePush(); syncPickers(); render();
-  toast(`«${m.title}» в архиве`);
-}
-
-/* ── Пауза: отпуск и перерывы не рвут серию ── */
-
-function archiveUI() {
-  const cur = currentMaterial();
-  const list = (data.archive || []).filter(a => !a.deleted)
-    .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
-  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short", year: "numeric" });
-
-  return `
-    <div class="freeze">
-      <div class="fz-head">📦 <b>Материалы</b> — пройденное уходит в архив, дни занятий остаются</div>
-      <div class="fz-empty">Сейчас: <b>${esc(cur.title)}</b> · ${Math.round(cur.pct)}%</div>
-      <button class="btn" id="archBtn" type="button">Отправить в архив и начать новое</button>
-      ${list.length ? `<div class="fz-list">${list.map(a => `
-        <div class="fz-item">
-          <span>${a.icon} ${esc(a.title)} · ${a.pct}% · ${fmt.format(fromStr(a.finishedAt)).replace(" г.", "")}</span>
-        </div>`).join("")}</div>` : ""}
-    </div>`;
-}
-
-function bindArchiveUI() {
-  const b = $("#archBtn");
-  if (b) b.addEventListener("click", () => { closeSheet(); archiveCurrent(); });
-}
-
-function goalUI() {
-  const g = goalProgress();
-  return `
-    <div class="freeze">
-      <div class="fz-head">🎯 <b>Цель на неделю</b> — сколько дней заниматься чем угодно из трёх</div>
-      <div class="goal-pick">
-        ${[2, 3, 4, 5, 6, 7].map(n =>
-          `<button class="gbtn ${g.goal === n ? "on" : ""}" data-goal="${n}" type="button">${n}</button>`).join("")}
-      </div>
-      <div class="fz-empty">Сейчас: <b>${g.days} из ${g.goal}</b> на этой неделе</div>
-    </div>`;
-}
-
-function bindGoalUI() {
-  document.querySelectorAll("[data-goal]").forEach(b =>
-    b.addEventListener("click", () => {
-      data.weekGoal = Number(b.dataset.goal);
-      saveData(); schedulePush();
-      openSettingsSheet();
-      render();
-      toast(`Цель: ${data.weekGoal} ${plural(data.weekGoal, "день", "дня", "дней")} в неделю`);
-    }));
-}
-
-function freezeUI() {
-  const list = (data.freezes || []).filter(f => !f.deleted)
-    .sort((a, b) => a.from < b.from ? 1 : -1);
-  const today = todayStr();
-
-  return `
-    <div class="freeze">
-      <div class="fz-head">🌴 <b>Пауза</b> — дни отпуска или болезни, которые не рвут серию</div>
-      <div class="fz-form">
-        <input class="note-input" id="fzFrom" type="date" value="${today}" max="2100-01-01">
-        <input class="note-input" id="fzTo" type="date" value="${today}" max="2100-01-01">
-        <button class="btn" id="fzAdd" type="button">Добавить</button>
-      </div>
-      ${list.length ? `<div class="fz-list">${list.map(f => `
-        <div class="fz-item ${today >= f.from && today <= f.to ? "now" : ""}">
-          <span>${fmtRange(f.from, f.to)}${today >= f.from && today <= f.to ? " · идёт сейчас" : ""}</span>
-          <button data-fz="${f.id}" type="button">✕</button>
-        </div>`).join("")}</div>` : `<div class="fz-empty">Пока пауз нет</div>`}
-    </div>`;
-}
-
-function fmtRange(from, to) {
-  const f = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
-  return from === to ? f.format(fromStr(from)) : `${f.format(fromStr(from))} — ${f.format(fromStr(to))}`;
-}
-
-function bindFreezeUI() {
-  const add = $("#fzAdd");
-  if (!add) return;
-  add.addEventListener("click", () => {
-    const from = $("#fzFrom").value, to = $("#fzTo").value;
-    if (!from || !to) { toast("Укажи даты"); return; }
-    const a = from <= to ? from : to, b = from <= to ? to : from;
-    data.freezes.push({ id: uid(), from: a, to: b, createdAt: now(), updatedAt: now() });
-    saveData(); schedulePush();
-    toast("Пауза добавлена — серия не прервётся");
-    openSettingsSheet();
-    render();
-  });
-
-  document.querySelectorAll("[data-fz]").forEach(b =>
-    b.addEventListener("click", () => {
-      const f = data.freezes.find(x => x.id === b.dataset.fz);
-      if (!f) return;
-      f.deleted = true; f.updatedAt = now();
-      saveData(); schedulePush();
-      openSettingsSheet();
-      render();
-    }));
-}
-
-// сравниваем свою версию с той, что лежит на сервере
-async function checkForUpdate() {
+// iOS требует явного разрешения — просим при первом касании кубика
+async function enableShake(ask) {
+  if (shakeReady) return true;
+  const DME = window.DeviceMotionEvent;
+  if (!DME) return false;
   try {
-    const r = await fetch("version.json?ts=" + Date.now(), { cache: "no-store" });
-    if (!r.ok) return;
-    const j = await r.json();
-    if (j.version && j.version !== APP_VERSION) {
-      newVersion = j.version;
-      renderBanner();
+    if (typeof DME.requestPermission === "function") {
+      if (!ask) return false;
+      const res = await DME.requestPermission();
+      if (res !== "granted") return false;
     }
-  } catch {}
+    window.addEventListener("devicemotion", handleShake);
+    shakeReady = true;
+    cfg.shake = true; saveCfg();
+    return true;
+  } catch { return false; }
 }
 
-async function forceUpdate() {
-  toast("Обновляю…");
-  try {
-    if ("serviceWorker" in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    }
-    if (window.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-  } catch {}
-  location.replace(location.pathname + "?v=" + Date.now());
+// кубик: просто прокручивает ленту и останавливается на выбранном материале
+function rollDice() {
+  const { pick } = rollCandidate();
+  if (!pick) return;
+
+  if (tab !== "home") { tab = "home"; cfg.tab = tab; saveCfg(); render(); }
+  if (!railApi) return;
+
+  const i = railApi.indexOf(pick.track, pick.pieceId || null);
+  if (i < 0) return;
+  railApi.spinTo(i, () => toast(`Сегодня — ${pick.name}`));
 }
 
 function openSettingsSheet() {
@@ -2588,7 +2494,13 @@ function init() {
   syncPickers();
 
   $("#gearBtn").addEventListener("click", openSettingsSheet);
-  $("#diceBtn").addEventListener("click", openDiceSheet);
+  $("#diceBtn").addEventListener("click", () => {
+    enableShake(true).then(ok => { if (ok) toast("Теперь можно просто потрясти телефон"); });
+    rollDice();
+  });
+
+  // если разрешение уже давали — включаем сразу
+  if (cfg.shake) enableShake(false);
   $("#sheetBg").addEventListener("click", closeSheet);
   $("#cheerOk").addEventListener("click", () => {
     $("#cheer").classList.remove("show");
