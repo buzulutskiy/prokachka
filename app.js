@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 55";
+const APP_VERSION = "2026.08.03 · 56";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -3000,34 +3000,6 @@ function paceForecast() {
   return { left, pace, sessions: Math.max(1, Math.ceil(left / pace)), unit, done: false };
 }
 
-/* Как часто человек берётся за материал — занятий в неделю.
-   Считаем по последним четырём неделям от сегодня, а не от последней отметки:
-   иначе неделя простоя никак не отражается и прогноз врёт в оптимистичную сторону.
-   Дни паузы (отпуск) из знаменателя вычитаем — они не должны портить картину. */
-function sessionsPerWeek() {
-  const all = [...new Set(entries().map(e => e.date))].sort();
-  if (all.length < 2) return 0;
-
-  const today = todayStr();
-  const from = new Date(); from.setDate(from.getDate() - 27);
-  const recent = all.filter(d => d >= dateStr(from) && d <= today);
-
-  let frozen = 0;
-  const d = new Date(from);
-  for (let i = 0; i < 28; i++) { if (isFrozen(dateStr(d))) frozen++; d.setDate(d.getDate() + 1); }
-
-  if (recent.length >= 2) {
-    // если история короче месяца, не растягиваем знаменатель на все 28 дней — но и меньше двух недель не берём
-    const span = daysBetween(recent[0], today) + 1;
-    const window = Math.max(7, Math.max(14, Math.min(28, span)) - frozen);
-    return recent.length / window * 7;
-  }
-
-  // отметок за месяц почти нет — берём средний темп за всю историю материала
-  const span = Math.max(7, daysBetween(all[0], today) + 1);
-  return all.length / span * 7;
-}
-
 /* Чем дальше срок, тем грубее формулировка: точная дата через два месяца —
    ложная точность, погрешность там всё равно в неделях. */
 const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня",
@@ -3037,14 +3009,10 @@ function humanWhen(d, days) {
   const gen = MONTHS_GEN[d.getMonth()];
   const year = d.getFullYear() !== new Date().getFullYear() ? " " + d.getFullYear() : "";
 
-  if (days <= 7) return "похоже, на этой неделе";
-  if (days <= 21) return `примерно к ${d.getDate()} ${gen}`;
-  if (days <= 120) {
-    const part = d.getDate() <= 10 ? "началу" : d.getDate() <= 20 ? "середине" : "концу";
-    return `примерно к ${part} ${gen}${year}`;
-  }
-  if (days <= 365) return `где-то ближе к ${gen}${year}`;
-  return "это надолго";
+  if (days <= 7) return "закончишь на этой неделе";
+  if (days <= 21) return `к ${d.getDate()} ${gen}`;
+  const part = d.getDate() <= 10 ? "началу" : d.getDate() <= 20 ? "середине" : "концу";
+  return `к ${part} ${gen}${year}`;
 }
 
 // короткая строка прогноза: «≈ 12 занятий · примерно до 5 октября»
@@ -3053,16 +3021,10 @@ function paceHTML() {
   if (!f) return "";
   if (f.done) return `<span class="pace">Материал пройден 🎉</span>`;
 
-  const perWeek = sessionsPerWeek();
-  let when = "";
-  if (perWeek >= 0.4) {
-    const days = Math.ceil(f.sessions / perWeek * 7);
-    if (days <= 730) {
-      const d = new Date(); d.setDate(d.getDate() + days);
-      when = " · " + humanWhen(d, days);
-    }
-  }
-  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} до конца${when}</span>`;
+  // считаем по-хорошему: занимаешься каждый день — вот и срок. Пропустил — завтра дата сдвинется
+  const d = new Date();
+  d.setDate(d.getDate() + f.sessions);
+  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} · каждый день — ${humanWhen(d, f.sessions)}</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
