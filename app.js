@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 41";
+const APP_VERSION = "2026.08.03 · 42";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -334,14 +334,13 @@ function activeDays() {
 
 function streak() {
   const days = activeDays();
-  const shielded = shieldedDays();
   let n = 0, skipped = 0;
   const d = new Date();
   if (!days.has(dateStr(d)) && !isFrozen(dateStr(d))) d.setDate(d.getDate() - 1);
   while (true) {
     const ds = dateStr(d);
     if (days.has(ds)) n++;
-    else if (isFrozen(ds) || shielded.has(ds)) skipped++;   // пауза или щит: день не рвёт серию
+    else if (isFrozen(ds)) skipped++;      // пауза: пропускаем день молча
     else break;
     if (n + skipped > 3650) break;
     d.setDate(d.getDate() - 1);
@@ -3093,63 +3092,19 @@ const T = (k) => {
   return (t.words && t.words[k]) || WORDS_BASE[k];
 };
 
-const GOODS = [
-  { id: "sound", icon: "🔔", name: "Звук отметки", cost: 150, once: true,
-    about: "Короткий звук в момент, когда занятие записано: гонг, деревянный шарик, метроном или машинка" },
-  { id: "voice", icon: "💬", name: "Голос приложения", cost: 250, once: true,
-    about: "Характер похвал и подсказок: сдержанный сэнсэй, свой человек или бортовой компьютер" },
-  { id: "shield", icon: "🛡️", name: "Щит серии", cost: 200,
-    about: "Один пропущенный день не разорвёт серию. Срабатывает сам на ближайшем пропуске после покупки" },
-  { id: "boost", icon: "✨", name: "Двойные монеты", cost: 300,
-    about: "Неделя, в которую каждое занятие приносит вдвое больше монет" }
-];
-const BOOST_DAYS = 7;
 
 const themeById = (id) => THEMES.find(t => t.id === id) || THEMES[0];
 const purchases = () => (data.shop.purchases || []).filter(p => !p.deleted);
 const ownedThemes = () => new Set(["dusk", ...purchases().filter(p => p.item === "theme").map(p => p.what)]);
 
-// щиты закрывают пропущенные дни: самый ранний пропуск после покупки — за счёт одного щита
-let shieldCache = { key: "", set: new Set() };
-function shieldedDays() {
-  const shields = purchases().filter(p => p.item === "shield").sort((a, b) => a.createdAt - b.createdAt);
-  const all = [...data.piano.entries, ...data.book.entries, ...data.pastel.entries].filter(e => !e.deleted);
-  const key = shields.length + ":" + all.length + ":" + todayStr();
-  if (shieldCache.key === key) return shieldCache.set;
-
-  const set = new Set();
-  if (shields.length && all.length) {
-    const days = new Set(all.map(e => e.date));
-    const first = [...days].sort()[0];
-    const today = todayStr();
-
-    // все пропуски от первого занятия до сегодня
-    const gaps = [];
-    const d = fromStr(first);
-    while (dateStr(d) <= today) {
-      const ds = dateStr(d);
-      if (!days.has(ds) && !isFrozen(ds)) gaps.push(ds);
-      d.setDate(d.getDate() + 1);
-    }
-    for (const p of shields) {
-      const from = dateStr(new Date(p.createdAt));
-      const hit = gaps.find(g => g >= from && !set.has(g));
-      if (hit) set.add(hit);
-    }
-  }
-  shieldCache = { key, set };
-  return set;
-}
-
 // серия на конкретную дату — нужна для бонуса за непрерывность
 function streakOn(days, ds) {
   let n = 0;
-  const shielded = shieldedDays();
   const d = fromStr(ds);
   while (true) {
     const cur = dateStr(d);
     if (days.has(cur)) n++;
-    else if (isFrozen(cur) || shielded.has(cur)) { /* пауза или щит не рвут */ }
+    else if (isFrozen(cur)) { /* пауза не рвёт */ }
     else break;
     if (n > 400) break;
     d.setDate(d.getDate() - 1);
@@ -3161,16 +3116,7 @@ function coinsEarned() {
   const all = [...data.piano.entries, ...data.book.entries, ...data.pastel.entries].filter(e => !e.deleted);
   const days = new Set(all.map(e => e.date));
 
-  // окна удвоения: неделя с момента покупки
-  const boosts = purchases().filter(p => p.item === "boost").map(p => {
-    const from = new Date(p.createdAt), to = new Date(p.createdAt);
-    to.setDate(to.getDate() + BOOST_DAYS - 1);
-    return { from: dateStr(from), to: dateStr(to) };
-  });
-  const boosted = (ds) => boosts.some(b => ds >= b.from && ds <= b.to);
-
-  let sum = 0;
-  for (const e of all) sum += COIN.session * (boosted(e.date) ? 2 : 1);   // каждая отмеченная сессия
+  let sum = all.length * COIN.session;                       // каждая отмеченная сессия
   for (const ds of days)                                      // и бонус за непрерывность
     sum += Math.min(COIN.streakCap, streakOn(days, ds) * COIN.streak);
 
@@ -3215,128 +3161,129 @@ function applyTheme(id) {
 }
 
 
-// сколько щитов куплено, но ещё не израсходовано, и сколько дней осталось у удвоения
-const shieldsLeft = () => purchases().filter(p => p.item === "shield").length - shieldedDays().size;
-function boostLeft() {
-  const today = todayStr();
-  let best = 0;
-  for (const p of purchases().filter(p => p.item === "boost")) {
-    const to = new Date(p.createdAt); to.setDate(to.getDate() + BOOST_DAYS - 1);
-    const left = Math.ceil((fromStr(dateStr(to)) - fromStr(today)) / 86400000) + 1;
-    if (dateStr(to) >= today) best = Math.max(best, left);
-  }
-  return best;
-}
-
-
-// переключатель верхнего уровня: текущие материалы или полка законченного
-function achTopHTML() {
-  return `
-    <div class="seg" id="achTop">
-      <button data-top="mats" class="${achTop === "mats" ? "on" : ""}" type="button">В работе</button>
-      <button data-top="shelf" class="${achTop === "shelf" ? "on" : ""}" type="button">📚 Полка ${shelfItems().length || ""}</button>
-    </div>`;
-}
-function bindAchTop() {
-  document.querySelectorAll("#achTop button").forEach(b =>
-    b.addEventListener("click", () => {
-      achTop = b.dataset.top; cfg.achTop = achTop; saveCfg();
-      renderAchList();
-      $("#view").scrollTop = 0;
-    }));
-}
-function renderAchTop() {}
-function renderShelfInto() {
-  renderShelf();
-  $("#view").insertAdjacentHTML("afterbegin", achTopHTML());
-  bindAchTop();
-  document.querySelectorAll("[data-shelf]").forEach(b =>
-    b.addEventListener("click", () => openShelfSheet(b.dataset.shelf)));
-}
-
 
 /* ── Звук отметки и голос приложения ── */
 const SOUNDS = [
-  { id: "off", name: "Тишина" },
-  { id: "gong", name: "Гонг" },
-  { id: "wood", name: "Деревянный шарик" },
-  { id: "click", name: "Метроном" },
-  { id: "type", name: "Печатная машинка" }
+  { id: "off",     name: "Тишина",        cost: 0 },
+  { id: "sputnik", name: "Спутник-1",     cost: 150, about: "тот самый бип из 1957-го" },
+  { id: "quindar", name: "Связь с ЦУПом", cost: 150, about: "квиндар-тон из переговоров с кораблём" },
+  { id: "bowl",    name: "Поющая чаша",   cost: 150, about: "удар и длинный хвост" },
+  { id: "koto",    name: "Струна",        cost: 120, about: "щипок, как на кото" },
+  { id: "block",   name: "Темпл-блок",    cost: 120, about: "сухой деревянный удар" }
 ];
 
-let audioCtx = null;
+// записи — общественное достояние, лежат рядом с приложением
+const SOUND_FILES = { sputnik: "sounds/sputnik.m4a", quindar: "sounds/quindar.m4a", bowl: "sounds/bowl.m4a" };
+const soundEls = {};
+
+let audioCtx = null, reverb = null;
+function audio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!audioCtx) {
+    audioCtx = new AC();
+    // маленький зал: без него синтез звучит сухо
+    const len = Math.floor(audioCtx.sampleRate * 1.8);
+    const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const ch = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8);
+    }
+    reverb = audioCtx.createConvolver();
+    reverb.buffer = buf;
+    const wet = audioCtx.createGain();
+    wet.gain.value = 0.28;
+    reverb.connect(wet); wet.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
 function playSound(id) {
   if (!id || id === "off") return;
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    audioCtx = audioCtx || new AC();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const t = audioCtx.currentTime;
-    const out = audioCtx.createGain();
-    out.connect(audioCtx.destination);
 
-    if (id === "gong") {
-      out.gain.setValueAtTime(0.0001, t);
-      out.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
-      out.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
-      for (const [f, g] of [[196, 1], [392, 0.5], [587, 0.25], [784, 0.12]]) {
-        const o = audioCtx.createOscillator(), v = audioCtx.createGain();
-        o.type = "sine"; o.frequency.value = f; v.gain.value = g;
-        o.connect(v); v.connect(out); o.start(t); o.stop(t + 2.5);
-      }
-      return;
-    }
-    if (id === "wood") {
-      const o = audioCtx.createOscillator();
-      o.type = "triangle";
-      o.frequency.setValueAtTime(720, t);
-      o.frequency.exponentialRampToValueAtTime(180, t + 0.09);
-      out.gain.setValueAtTime(0.3, t);
-      out.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-      o.connect(out); o.start(t); o.stop(t + 0.14);
-      return;
-    }
-    if (id === "click") {
-      const o = audioCtx.createOscillator();
-      o.type = "square"; o.frequency.value = 1400;
-      out.gain.setValueAtTime(0.16, t);
-      out.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
-      o.connect(out); o.start(t); o.stop(t + 0.05);
-      return;
-    }
-    if (id === "type") {
-      const len = Math.floor(audioCtx.sampleRate * 0.06);
-      const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-      const ch = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-      const src = audioCtx.createBufferSource();
-      src.buffer = buf;
-      const flt = audioCtx.createBiquadFilter();
-      flt.type = "bandpass"; flt.frequency.value = 1800;
+  const file = SOUND_FILES[id];
+  if (file) {
+    try {
+      let el = soundEls[id];
+      if (!el) { el = new Audio(file); el.preload = "auto"; soundEls[id] = el; }
+      el.currentTime = 0;
+      el.volume = 0.85;
+      el.play().catch(() => {});
+    } catch {}
+    return;
+  }
+
+  try {
+    const ac = audio();
+    if (!ac) return;
+    const t = ac.currentTime;
+    const out = ac.createGain();
+    out.connect(ac.destination);
+    out.connect(reverb);
+
+    if (id === "koto") {
+      // щипок Карплюса-Стронга: шумовой импульс гуляет по линии задержки
+      const pluck = (freq, at, level) => {
+        const n = Math.floor(ac.sampleRate * 0.02);
+        const buf = ac.createBuffer(1, n, ac.sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+        const src = ac.createBufferSource(); src.buffer = buf;
+        const dl = ac.createDelay(1); dl.delayTime.value = 1 / freq;
+        const fb = ac.createGain(); fb.gain.value = 0.962;
+        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2800;
+        const env = ac.createGain();
+        env.gain.setValueAtTime(level, at);
+        env.gain.exponentialRampToValueAtTime(0.0001, at + 1.6);
+        src.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl);
+        dl.connect(env); env.connect(out);
+        src.start(at);
+      };
       out.gain.value = 0.5;
-      src.connect(flt); flt.connect(out); src.start(t);
+      pluck(392, t, 1);
+      pluck(587, t + 0.12, 0.7);
+      return;
+    }
+
+    if (id === "block") {
+      out.gain.value = 0.34;
+      const n = Math.floor(ac.sampleRate * 0.12);
+      const buf = ac.createBuffer(1, n, ac.sampleRate);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 5);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 9;
+      const body = ac.createOscillator(), benv = ac.createGain();
+      body.type = "triangle";
+      body.frequency.setValueAtTime(560, t);
+      body.frequency.exponentialRampToValueAtTime(300, t + 0.1);
+      benv.gain.setValueAtTime(0.6, t);
+      benv.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      src.connect(bp); bp.connect(out);
+      body.connect(benv); benv.connect(out);
+      src.start(t); body.start(t); body.stop(t + 0.2);
     }
   } catch {}
 }
 
 const VOICES = [
-  { id: "default", name: "Как сейчас", cost: 0,
+  { id: "default", name: "Как сейчас", cost: 0, about: "нейтральный",
     done: ["Молодец!", "Красавчик!", "Есть!", "Сделано!"],
     piano: ["Один подход сегодня — и ещё пара тактов твои", "15 минут за инструментом лучше, чем ноль", "Пианино скучает"],
     book: ["Пара страниц сегодня — и книга ближе к финалу", "10 страниц перед сном — и день прожит не зря", "Книга ждёт на закладке"],
     pastel: ["Один урок сегодня — и руки в пастели", "Мелки скучают по бумаге", "Двадцать минут курса — уже движение"] },
-  { id: "sensei", name: "Сэнсэй",
+  { id: "sensei", name: "Сэнсэй", cost: 250, about: "коротко и спокойно, без похвалы впустую",
     done: ["Достаточно на сегодня.", "Хорошо. Продолжим завтра.", "Форма сделана. Иди отдыхать.", "Так и надо."],
     piano: ["Сядь и сыграй один такт. Этого хватит", "Руки помнят лучше, когда их не торопят", "Инструмент ждёт, он никуда не спешит"],
     book: ["Прочти страницу. Медленно", "Книга не убежит, но и сама себя не прочтёт", "Одна страница сегодня — уже путь"],
     pastel: ["Возьми мелок. Дальше рука сама", "Один урок — и довольно", "Смотреть важнее, чем спешить"] },
-  { id: "friend", name: "Свой человек",
+  { id: "friend", name: "Свой человек", cost: 250, about: "подгоняет по-дружески",
     done: ["Ну ты красавчик", "Вот это дело!", "Зачёт", "Так держать, я в тебя верил"],
     piano: ["Го поиграть, хоть чуть-чуть", "Пианино там пылится, между прочим", "Пятнадцать минут — и ты герой"],
     book: ["Давай хоть десять страниц, а?", "Книжка сама себя не дочитает", "Заварил чай — и вперёд"],
     pastel: ["Один урок — и хватит на сегодня", "Мелки скучают, честно", "Быстренько, пока не передумал"] },
-  { id: "computer", name: "Бортовой компьютер",
+  { id: "computer", name: "Бортовой компьютер", cost: 300, about: "сухие сводки и рекомендации",
     done: ["Сеанс зафиксирован.", "Данные приняты.", "Отклонений нет.", "Норма выполнена."],
     piano: ["Рекомендую сеанс продолжительностью 15 минут", "Инструмент в режиме ожидания", "Пропуск повлияет на цикл"],
     book: ["Оптимально: десять страниц до отбоя", "Чтение не зафиксировано сегодня", "Материал ожидает продолжения"],
@@ -3446,37 +3393,37 @@ function renderShop() {
         награда — ${COIN.ach}, карточка знаний — ${COIN.fact}</div>
     </div>
 
-    <div class="shop-head">Полезное</div>
+    <div class="shop-head">Звук отметки</div>
     <div class="theme-list">
-      ${GOODS.map(g => {
-        const bought = g.once && purchases().some(p => p.item === g.id);
-        const extra = g.id === "shield" ? `в запасе: ${shieldsLeft()}`
-          : g.id === "boost" && boostLeft() > 0 ? `действует ещё ${boostLeft()} ${plural(boostLeft(), "день", "дня", "дней")}`
-          : "";
+      ${SOUNDS.map(sn => {
+        const have = sn.cost === 0 || purchases().some(p => p.item === "sound" && p.what === sn.id);
+        const on = (data.shop.sound || "off") === sn.id;
         return `
-        <div class="theme">
-          <span class="th-ic">${g.icon}</span>
-          <span class="th-txt"><b>${esc(g.name)}</b><em>${esc(g.about)}${extra ? " · " + extra : ""}</em></span>
-          ${bought
-            ? `<span class="th-tag">куплено</span>`
-            : `<button class="th-btn buy ${bal < g.cost ? "off" : ""}" data-good="${g.id}" type="button">${g.cost} ${T("coin")}</button>`}
-        </div>`;
+          <div class="theme ${on ? "on" : ""}">
+            <span class="th-ic">${sn.id === "off" ? "🔇" : "🔔"}</span>
+            <span class="th-txt"><b>${esc(sn.name)}</b>${sn.about ? `<em>${esc(sn.about)}</em>` : ""}</span>
+            ${on ? `<span class="th-tag">включён</span>`
+              : have ? `<button class="th-btn" data-sound="${sn.id}" type="button">Включить</button>`
+              : `<button class="th-btn buy ${bal < sn.cost ? "off" : ""}" data-buysound="${sn.id}" type="button">${sn.cost} ${T("coin")}</button>`}
+          </div>`;
       }).join("")}
     </div>
 
-    ${purchases().some(p => p.item === "sound") ? `
-      <div class="shop-head">Звук отметки</div>
-      <div class="pick-row">
-        ${SOUNDS.map(sn => `
-          <button class="pick ${(data.shop.sound || "off") === sn.id ? "on" : ""}" data-sound="${sn.id}" type="button">${esc(sn.name)}</button>`).join("")}
-      </div>` : ""}
-
-    ${purchases().some(p => p.item === "voice") ? `
-      <div class="shop-head">Голос приложения</div>
-      <div class="pick-row">
-        ${VOICES.map(v => `
-          <button class="pick ${(data.shop.voice || "default") === v.id ? "on" : ""}" data-voice="${v.id}" type="button">${esc(v.name)}</button>`).join("")}
-      </div>` : ""}
+    <div class="shop-head">Голос приложения</div>
+    <div class="theme-list">
+      ${VOICES.map(v => {
+        const have = !v.cost || purchases().some(p => p.item === "voice" && p.what === v.id);
+        const on = (data.shop.voice || "default") === v.id;
+        return `
+          <div class="theme ${on ? "on" : ""}">
+            <span class="th-ic">💬</span>
+            <span class="th-txt"><b>${esc(v.name)}</b><em>${esc(v.about || "")}</em></span>
+            ${on ? `<span class="th-tag">выбран</span>`
+              : have ? `<button class="th-btn" data-voice="${v.id}" type="button">Включить</button>`
+              : `<button class="th-btn buy ${bal < v.cost ? "off" : ""}" data-buyvoice="${v.id}" type="button">${v.cost} ${T("coin")}</button>`}
+          </div>`;
+      }).join("")}
+    </div>
 
     <div class="shop-head">${T("shopThemes")}</div>
     <div class="theme-list">
@@ -3517,6 +3464,25 @@ function renderShop() {
 
     <div class="shop-note">${esc(T("shopNote"))}</div>`;
 
+  document.querySelectorAll("[data-buysound]").forEach(b =>
+    b.addEventListener("click", () => {
+      const sn = SOUNDS.find(x => x.id === b.dataset.buysound);
+      if (!confirm(`Купить звук «${sn.name}» за ${sn.cost} монет?`)) return;
+      if (!buy("sound", sn.id, sn.cost, sn.name)) return;
+      data.shop.sound = sn.id; saveData(); playSound(sn.id);
+      renderShop(); renderTabbar();
+    }));
+
+  document.querySelectorAll("[data-buyvoice]").forEach(b =>
+    b.addEventListener("click", () => {
+      const v = VOICES.find(x => x.id === b.dataset.buyvoice);
+      if (!confirm(`Купить голос «${v.name}» за ${v.cost} монет?`)) return;
+      if (!buy("voice", v.id, v.cost, v.name)) return;
+      data.shop.voice = v.id; saveData();
+      renderShop(); renderTabbar();
+      toast(rnd(voice().done));
+    }));
+
   document.querySelectorAll("[data-sound]").forEach(b =>
     b.addEventListener("click", () => {
       data.shop.sound = b.dataset.sound; saveData(); schedulePush();
@@ -3529,15 +3495,6 @@ function renderShop() {
       data.shop.voice = b.dataset.voice; saveData(); schedulePush();
       renderShop();
       toast(rnd(voice().done));
-    }));
-
-  document.querySelectorAll("[data-good]").forEach(b =>
-    b.addEventListener("click", () => {
-      const g = GOODS.find(x => x.id === b.dataset.good);
-      if (!g) return;
-      if (!confirm(`Купить «${g.name}» за ${g.cost} монет?`)) return;
-      if (!buy(g.id, g.id, g.cost, g.name)) return;
-      renderShop(); renderTabbar();
     }));
 
   document.querySelectorAll("[data-use]").forEach(b =>
