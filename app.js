@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 33";
+const APP_VERSION = "2026.08.03 · 34";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2066,6 +2066,7 @@ function renderHome() {
       <div class="hero-title">
         <h2>${isBook() ? esc(book().title) : isPastel() ? esc(course().name) : esc(piece().name)}</h2>
         <p>${sub}</p>
+        ${paceHTML()}
       </div>
       <button class="cta ${!gistReady() ? "locked" : doneToday ? "done" : ""}" id="ctaBtn" type="button">
         ${!gistReady()
@@ -2277,7 +2278,8 @@ function updateHeroInfo() {
       ? `${esc(s.chapter.name)} · осталось ${stranic(s.pages - s.page)}`
       : isPastel()
         ? `${s.done} из ${s.lessons} уроков · ${s.minutes} мин пройдено`
-        : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`}</p>`;
+        : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`}</p>
+    ${paceHTML()}`;
 
   const cta = $("#ctaBtn");
   if (cta) {
@@ -2345,6 +2347,73 @@ function rangeStats(from, to) {
     ...(pastel.length ? ["pastel"] : [])
   ]);
   return { days, bars, pages, lessons, tracks, entries: piano.length + bookList.length + pastel.length };
+}
+
+/* ── Сколько ещё занятий до конца материала ──
+   Считаем по последним сессиям: сколько единиц (тактов, страниц, уроков)
+   прибавлялось за раз, и делим на остаток. */
+function paceForecast() {
+  const list = entries().slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  if (!list.length) return null;
+
+  // прогресс в единицах на конец каждой сессии
+  let marks = [], unit = "", total = 0;
+
+  if (isBook()) {
+    const b = book();
+    total = b.pages;
+    unit = "page";
+    let page = b.startPage || 0;
+    for (const e of list) { page = Math.max(page, e.page || 0); marks.push(page); }
+    marks.unshift(b.startPage || 0);
+  } else if (isPastel()) {
+    total = course().lessons.length;
+    unit = "lesson";
+    const seen = new Set();
+    marks.push(0);
+    for (const e of list) { for (const i of e.lessons || []) seen.add(i); marks.push(seen.size); }
+  } else {
+    const bars = piece().bars;
+    total = bars * 2;                       // каждая рука отдельно
+    unit = "bar";
+    const r = new Set(), l = new Set();
+    marks.push(0);
+    for (const e of list) {
+      for (const sp of e.spans || []) {
+        const set = sp.hand === "left" ? l : r;
+        for (let i = Math.max(1, sp.from); i <= Math.min(bars, sp.to); i++) set.add(i);
+      }
+      marks.push(r.size + l.size);
+    }
+  }
+
+  const done = marks[marks.length - 1];
+  const left = Math.max(0, total - done);
+  if (!left) return { left: 0, sessions: 0, pace: 0, unit, done: true };
+
+  // средний прирост за последние сессии (берём до пяти, нули не считаем)
+  const gains = [];
+  for (let i = marks.length - 1; i > 0 && gains.length < 5; i--) {
+    const g = marks[i] - marks[i - 1];
+    if (g > 0) gains.push(g);
+  }
+  if (!gains.length) return null;
+
+  const pace = gains.reduce((a, b) => a + b, 0) / gains.length;
+  return { left, pace, sessions: Math.max(1, Math.ceil(left / pace)), unit, done: false };
+}
+
+// строка вида «≈ 12 занятий — по 18 страниц за раз»
+function paceHTML() {
+  const f = paceForecast();
+  if (!f) return "";
+  if (f.done) return `<span class="pace">Материал пройден 🎉</span>`;
+
+  const per = f.unit === "page" ? `${Math.round(f.pace)} ${plural(Math.round(f.pace), "страница", "страницы", "страниц")}`
+    : f.unit === "lesson" ? `${f.pace.toFixed(1).replace(".0", "")} ${plural(Math.round(f.pace), "урок", "урока", "уроков")}`
+    : `${Math.round(f.pace)} ${plural(Math.round(f.pace), "такт", "такта", "тактов")}`;
+
+  return `<span class="pace">Таким темпом — ещё ≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")}, по ${per} за раз</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
