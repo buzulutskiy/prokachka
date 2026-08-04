@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 42";
+const APP_VERSION = "2026.08.03 · 43";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -110,6 +110,7 @@ const DEFAULT_BOOKS = [
 ];
 
 const FIRM_AT = 3;
+const DONE_TITLES = ["Молодец!", "Красавчик!", "Есть!", "Сделано!"];
 const DOW = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
 /* ── Состояние ── */
@@ -179,7 +180,7 @@ function emptyData() {
     piano: { pieces: DEFAULT_PIECES.map(p => ({ ...p, updatedAt: 0 })), activePiece: DEFAULT_PIECES[0].id, entries: [] },
     book: { books: DEFAULT_BOOKS.map(b => ({ ...b, updatedAt: 0 })), activeBook: DEFAULT_BOOKS[0].id, entries: [] },
     pastel: { course: { ...DEFAULT_COURSE, updatedAt: 0 }, entries: [] },
-    shop: { theme: "dusk", sound: "off", voice: "default", purchases: [] },   // купленные темы и мелочи
+    shop: { theme: "dusk", purchases: [] },   // купленные темы и мелочи
     weekGoal: 4,   // общая цель: сколько дней в неделю заниматься чем угодно
     freezes: [],   // периоды паузы: отпуск, болезнь — серия их не замечает
     archive: []    // пройденные материалы
@@ -252,8 +253,6 @@ function migrate(obj) {
   if (obj.shop) {
     if (Array.isArray(obj.shop.purchases)) base.shop.purchases = obj.shop.purchases;
     if (typeof obj.shop.theme === "string") base.shop.theme = obj.shop.theme;
-    if (typeof obj.shop.sound === "string") base.shop.sound = obj.shop.sound;
-    if (typeof obj.shop.voice === "string") base.shop.voice = obj.shop.voice;
   }
   if (Number(obj.weekGoal) > 0) base.weekGoal = Math.min(7, Math.round(obj.weekGoal));
   if (Array.isArray(obj.freezes)) base.freezes = obj.freezes;
@@ -1757,8 +1756,7 @@ function showDone(before, after, wasExisting) {
   if (wasExisting) { toast("Запись дополнена"); return; }
 
   $("#cheerIc").textContent = after.streak >= 2 ? "🔥" : "🎉";
-  playSound(data.shop && data.shop.sound);
-  $("#cheerTitle").textContent = rnd(voice().done);
+  $("#cheerTitle").textContent = rnd(DONE_TITLES);
   let text;
   if (isBook()) {
     const g = after.page - before.page;
@@ -2072,7 +2070,7 @@ function renderHome() {
   const freeze = activeFreeze();
   const nudge = freeze
     ? `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится`
-    : doneToday ? "" : esc(rnd(voice()[data.active] || []));
+    : "";
 
   $("#view").innerHTML = `
     <div class="hero">
@@ -2312,7 +2310,7 @@ function updateHeroInfo() {
     const freeze = activeFreeze();
     nudge.innerHTML = freeze
       ? `🌴 Пауза до <b>${fmtRange(freeze.to, freeze.to)}</b> — серия сохранится`
-      : doneToday ? "" : esc(rnd(voice()[data.active] || []));
+      : "";
   }
 }
 function barMap(arr, cls) {
@@ -2788,7 +2786,7 @@ function renderAch() {
 
 // входной экран: материалы и сколько наград по каждому
 function renderAchList() {
-  if (achTop === "shelf") { renderAchTop(); renderShelfInto(); return; }
+  if (achTop === "shelf") { renderShelfInto(); return; }
   const mats = achMaterials();
 
   $("#view").innerHTML = `
@@ -3162,135 +3160,29 @@ function applyTheme(id) {
 
 
 
-/* ── Звук отметки и голос приложения ── */
-const SOUNDS = [
-  { id: "off",     name: "Тишина",        cost: 0 },
-  { id: "sputnik", name: "Спутник-1",     cost: 150, about: "тот самый бип из 1957-го" },
-  { id: "quindar", name: "Связь с ЦУПом", cost: 150, about: "квиндар-тон из переговоров с кораблём" },
-  { id: "bowl",    name: "Поющая чаша",   cost: 150, about: "удар и длинный хвост" },
-  { id: "koto",    name: "Струна",        cost: 120, about: "щипок, как на кото" },
-  { id: "block",   name: "Темпл-блок",    cost: 120, about: "сухой деревянный удар" }
-];
-
-// записи — общественное достояние, лежат рядом с приложением
-const SOUND_FILES = { sputnik: "sounds/sputnik.m4a", quindar: "sounds/quindar.m4a", bowl: "sounds/bowl.m4a" };
-const soundEls = {};
-
-let audioCtx = null, reverb = null;
-function audio() {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  if (!audioCtx) {
-    audioCtx = new AC();
-    // маленький зал: без него синтез звучит сухо
-    const len = Math.floor(audioCtx.sampleRate * 1.8);
-    const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const ch = buf.getChannelData(c);
-      for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8);
-    }
-    reverb = audioCtx.createConvolver();
-    reverb.buffer = buf;
-    const wet = audioCtx.createGain();
-    wet.gain.value = 0.28;
-    reverb.connect(wet); wet.connect(audioCtx.destination);
-  }
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  return audioCtx;
+// переключатель верхнего уровня «Достижений»: текущие материалы или полка
+function achTopHTML() {
+  return `
+    <div class="seg" id="achTop">
+      <button data-top="mats" class="${achTop === "mats" ? "on" : ""}" type="button">В работе</button>
+      <button data-top="shelf" class="${achTop === "shelf" ? "on" : ""}" type="button">📚 Полка ${shelfItems().length || ""}</button>
+    </div>`;
 }
-
-function playSound(id) {
-  if (!id || id === "off") return;
-
-  const file = SOUND_FILES[id];
-  if (file) {
-    try {
-      let el = soundEls[id];
-      if (!el) { el = new Audio(file); el.preload = "auto"; soundEls[id] = el; }
-      el.currentTime = 0;
-      el.volume = 0.85;
-      el.play().catch(() => {});
-    } catch {}
-    return;
-  }
-
-  try {
-    const ac = audio();
-    if (!ac) return;
-    const t = ac.currentTime;
-    const out = ac.createGain();
-    out.connect(ac.destination);
-    out.connect(reverb);
-
-    if (id === "koto") {
-      // щипок Карплюса-Стронга: шумовой импульс гуляет по линии задержки
-      const pluck = (freq, at, level) => {
-        const n = Math.floor(ac.sampleRate * 0.02);
-        const buf = ac.createBuffer(1, n, ac.sampleRate);
-        const ch = buf.getChannelData(0);
-        for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
-        const src = ac.createBufferSource(); src.buffer = buf;
-        const dl = ac.createDelay(1); dl.delayTime.value = 1 / freq;
-        const fb = ac.createGain(); fb.gain.value = 0.962;
-        const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2800;
-        const env = ac.createGain();
-        env.gain.setValueAtTime(level, at);
-        env.gain.exponentialRampToValueAtTime(0.0001, at + 1.6);
-        src.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl);
-        dl.connect(env); env.connect(out);
-        src.start(at);
-      };
-      out.gain.value = 0.5;
-      pluck(392, t, 1);
-      pluck(587, t + 0.12, 0.7);
-      return;
-    }
-
-    if (id === "block") {
-      out.gain.value = 0.34;
-      const n = Math.floor(ac.sampleRate * 0.12);
-      const buf = ac.createBuffer(1, n, ac.sampleRate);
-      const ch = buf.getChannelData(0);
-      for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 5);
-      const src = ac.createBufferSource(); src.buffer = buf;
-      const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 9;
-      const body = ac.createOscillator(), benv = ac.createGain();
-      body.type = "triangle";
-      body.frequency.setValueAtTime(560, t);
-      body.frequency.exponentialRampToValueAtTime(300, t + 0.1);
-      benv.gain.setValueAtTime(0.6, t);
-      benv.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-      src.connect(bp); bp.connect(out);
-      body.connect(benv); benv.connect(out);
-      src.start(t); body.start(t); body.stop(t + 0.2);
-    }
-  } catch {}
+function bindAchTop() {
+  document.querySelectorAll("#achTop button").forEach(b =>
+    b.addEventListener("click", () => {
+      achTop = b.dataset.top; cfg.achTop = achTop; saveCfg();
+      renderAchList();
+      $("#view").scrollTop = 0;
+    }));
 }
-
-const VOICES = [
-  { id: "default", name: "Как сейчас", cost: 0, about: "нейтральный",
-    done: ["Молодец!", "Красавчик!", "Есть!", "Сделано!"],
-    piano: ["Один подход сегодня — и ещё пара тактов твои", "15 минут за инструментом лучше, чем ноль", "Пианино скучает"],
-    book: ["Пара страниц сегодня — и книга ближе к финалу", "10 страниц перед сном — и день прожит не зря", "Книга ждёт на закладке"],
-    pastel: ["Один урок сегодня — и руки в пастели", "Мелки скучают по бумаге", "Двадцать минут курса — уже движение"] },
-  { id: "sensei", name: "Сэнсэй", cost: 250, about: "коротко и спокойно, без похвалы впустую",
-    done: ["Достаточно на сегодня.", "Хорошо. Продолжим завтра.", "Форма сделана. Иди отдыхать.", "Так и надо."],
-    piano: ["Сядь и сыграй один такт. Этого хватит", "Руки помнят лучше, когда их не торопят", "Инструмент ждёт, он никуда не спешит"],
-    book: ["Прочти страницу. Медленно", "Книга не убежит, но и сама себя не прочтёт", "Одна страница сегодня — уже путь"],
-    pastel: ["Возьми мелок. Дальше рука сама", "Один урок — и довольно", "Смотреть важнее, чем спешить"] },
-  { id: "friend", name: "Свой человек", cost: 250, about: "подгоняет по-дружески",
-    done: ["Ну ты красавчик", "Вот это дело!", "Зачёт", "Так держать, я в тебя верил"],
-    piano: ["Го поиграть, хоть чуть-чуть", "Пианино там пылится, между прочим", "Пятнадцать минут — и ты герой"],
-    book: ["Давай хоть десять страниц, а?", "Книжка сама себя не дочитает", "Заварил чай — и вперёд"],
-    pastel: ["Один урок — и хватит на сегодня", "Мелки скучают, честно", "Быстренько, пока не передумал"] },
-  { id: "computer", name: "Бортовой компьютер", cost: 300, about: "сухие сводки и рекомендации",
-    done: ["Сеанс зафиксирован.", "Данные приняты.", "Отклонений нет.", "Норма выполнена."],
-    piano: ["Рекомендую сеанс продолжительностью 15 минут", "Инструмент в режиме ожидания", "Пропуск повлияет на цикл"],
-    book: ["Оптимально: десять страниц до отбоя", "Чтение не зафиксировано сегодня", "Материал ожидает продолжения"],
-    pastel: ["Один модуль курса — достаточная норма", "Материалы подготовлены", "Практика улучшает результат"] }
-];
-const voiceById = (id) => VOICES.find(v => v.id === id) || VOICES[0];
-const voice = () => voiceById(data.shop && data.shop.voice);
+function renderShelfInto() {
+  renderShelf();
+  $("#view").insertAdjacentHTML("afterbegin", achTopHTML());
+  bindAchTop();
+  document.querySelectorAll("[data-shelf]").forEach(b =>
+    b.addEventListener("click", () => openShelfSheet(b.dataset.shelf)));
+}
 
 /* ── Полка: всё, что доведено до конца ── */
 const shelfItems = () => (data.archive || []).filter(a => !a.deleted)
@@ -3393,38 +3285,6 @@ function renderShop() {
         награда — ${COIN.ach}, карточка знаний — ${COIN.fact}</div>
     </div>
 
-    <div class="shop-head">Звук отметки</div>
-    <div class="theme-list">
-      ${SOUNDS.map(sn => {
-        const have = sn.cost === 0 || purchases().some(p => p.item === "sound" && p.what === sn.id);
-        const on = (data.shop.sound || "off") === sn.id;
-        return `
-          <div class="theme ${on ? "on" : ""}">
-            <span class="th-ic">${sn.id === "off" ? "🔇" : "🔔"}</span>
-            <span class="th-txt"><b>${esc(sn.name)}</b>${sn.about ? `<em>${esc(sn.about)}</em>` : ""}</span>
-            ${on ? `<span class="th-tag">включён</span>`
-              : have ? `<button class="th-btn" data-sound="${sn.id}" type="button">Включить</button>`
-              : `<button class="th-btn buy ${bal < sn.cost ? "off" : ""}" data-buysound="${sn.id}" type="button">${sn.cost} ${T("coin")}</button>`}
-          </div>`;
-      }).join("")}
-    </div>
-
-    <div class="shop-head">Голос приложения</div>
-    <div class="theme-list">
-      ${VOICES.map(v => {
-        const have = !v.cost || purchases().some(p => p.item === "voice" && p.what === v.id);
-        const on = (data.shop.voice || "default") === v.id;
-        return `
-          <div class="theme ${on ? "on" : ""}">
-            <span class="th-ic">💬</span>
-            <span class="th-txt"><b>${esc(v.name)}</b><em>${esc(v.about || "")}</em></span>
-            ${on ? `<span class="th-tag">выбран</span>`
-              : have ? `<button class="th-btn" data-voice="${v.id}" type="button">Включить</button>`
-              : `<button class="th-btn buy ${bal < v.cost ? "off" : ""}" data-buyvoice="${v.id}" type="button">${v.cost} ${T("coin")}</button>`}
-          </div>`;
-      }).join("")}
-    </div>
-
     <div class="shop-head">${T("shopThemes")}</div>
     <div class="theme-list">
       ${THEMES.filter(t => t.kind !== "world").map(t => {
@@ -3463,39 +3323,6 @@ function renderShop() {
     </div>
 
     <div class="shop-note">${esc(T("shopNote"))}</div>`;
-
-  document.querySelectorAll("[data-buysound]").forEach(b =>
-    b.addEventListener("click", () => {
-      const sn = SOUNDS.find(x => x.id === b.dataset.buysound);
-      if (!confirm(`Купить звук «${sn.name}» за ${sn.cost} монет?`)) return;
-      if (!buy("sound", sn.id, sn.cost, sn.name)) return;
-      data.shop.sound = sn.id; saveData(); playSound(sn.id);
-      renderShop(); renderTabbar();
-    }));
-
-  document.querySelectorAll("[data-buyvoice]").forEach(b =>
-    b.addEventListener("click", () => {
-      const v = VOICES.find(x => x.id === b.dataset.buyvoice);
-      if (!confirm(`Купить голос «${v.name}» за ${v.cost} монет?`)) return;
-      if (!buy("voice", v.id, v.cost, v.name)) return;
-      data.shop.voice = v.id; saveData();
-      renderShop(); renderTabbar();
-      toast(rnd(voice().done));
-    }));
-
-  document.querySelectorAll("[data-sound]").forEach(b =>
-    b.addEventListener("click", () => {
-      data.shop.sound = b.dataset.sound; saveData(); schedulePush();
-      playSound(data.shop.sound);
-      renderShop();
-    }));
-
-  document.querySelectorAll("[data-voice]").forEach(b =>
-    b.addEventListener("click", () => {
-      data.shop.voice = b.dataset.voice; saveData(); schedulePush();
-      renderShop();
-      toast(rnd(voice().done));
-    }));
 
   document.querySelectorAll("[data-use]").forEach(b =>
     b.addEventListener("click", () => {
@@ -4070,8 +3897,6 @@ async function syncNow(manual) {
       data.shop.purchases = mergeLists(data.shop.purchases, remote.shop.purchases || []);
       if ((remote.savedAt || 0) > (cfg.lastSync || 0)) {
         if (remote.shop.theme) data.shop.theme = remote.shop.theme;
-        if (remote.shop.sound) data.shop.sound = remote.shop.sound;
-        if (remote.shop.voice) data.shop.voice = remote.shop.voice;
       }
     }
     data.archive = mergeLists(data.archive, remote.archive);
