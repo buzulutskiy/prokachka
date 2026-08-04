@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 54";
+const APP_VERSION = "2026.08.03 · 55";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2987,25 +2987,64 @@ function paceForecast() {
 
   // средний прирост за последние сессии (берём до пяти, нули не считаем)
   const gains = [];
-  for (let i = marks.length - 1; i > 0 && gains.length < 5; i--) {
+  for (let i = marks.length - 1; i > 0 && gains.length < 8; i--) {
     const g = marks[i] - marks[i - 1];
     if (g > 0) gains.push(g);
   }
   if (!gains.length) return null;
 
-  const pace = gains.reduce((a, b) => a + b, 0) / gains.length;
+  // медиана устойчивее среднего: один марафон на полкниги не должен задирать прогноз
+  const sorted = gains.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const pace = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   return { left, pace, sessions: Math.max(1, Math.ceil(left / pace)), unit, done: false };
 }
 
-// как часто человек берётся за этот материал: занятий в неделю за последний месяц
+/* Как часто человек берётся за материал — занятий в неделю.
+   Считаем по последним четырём неделям от сегодня, а не от последней отметки:
+   иначе неделя простоя никак не отражается и прогноз врёт в оптимистичную сторону.
+   Дни паузы (отпуск) из знаменателя вычитаем — они не должны портить картину. */
 function sessionsPerWeek() {
-  const days = [...new Set(entries().map(e => e.date))].sort();
-  if (days.length < 2) return 0;
-  const last = days[days.length - 1];
-  const from = new Date(fromStr(last)); from.setDate(from.getDate() - 27);
-  const recent = days.filter(d => d >= dateStr(from));
-  const span = Math.max(7, daysBetween(recent[0], last) + 1);   // хотя бы неделя, иначе темп завышен
-  return recent.length / span * 7;
+  const all = [...new Set(entries().map(e => e.date))].sort();
+  if (all.length < 2) return 0;
+
+  const today = todayStr();
+  const from = new Date(); from.setDate(from.getDate() - 27);
+  const recent = all.filter(d => d >= dateStr(from) && d <= today);
+
+  let frozen = 0;
+  const d = new Date(from);
+  for (let i = 0; i < 28; i++) { if (isFrozen(dateStr(d))) frozen++; d.setDate(d.getDate() + 1); }
+
+  if (recent.length >= 2) {
+    // если история короче месяца, не растягиваем знаменатель на все 28 дней — но и меньше двух недель не берём
+    const span = daysBetween(recent[0], today) + 1;
+    const window = Math.max(7, Math.max(14, Math.min(28, span)) - frozen);
+    return recent.length / window * 7;
+  }
+
+  // отметок за месяц почти нет — берём средний темп за всю историю материала
+  const span = Math.max(7, daysBetween(all[0], today) + 1);
+  return all.length / span * 7;
+}
+
+/* Чем дальше срок, тем грубее формулировка: точная дата через два месяца —
+   ложная точность, погрешность там всё равно в неделях. */
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+function humanWhen(d, days) {
+  const gen = MONTHS_GEN[d.getMonth()];
+  const year = d.getFullYear() !== new Date().getFullYear() ? " " + d.getFullYear() : "";
+
+  if (days <= 7) return "похоже, на этой неделе";
+  if (days <= 21) return `примерно к ${d.getDate()} ${gen}`;
+  if (days <= 120) {
+    const part = d.getDate() <= 10 ? "началу" : d.getDate() <= 20 ? "середине" : "концу";
+    return `примерно к ${part} ${gen}${year}`;
+  }
+  if (days <= 365) return `где-то ближе к ${gen}${year}`;
+  return "это надолго";
 }
 
 // короткая строка прогноза: «≈ 12 занятий · примерно до 5 октября»
@@ -3016,12 +3055,11 @@ function paceHTML() {
 
   const perWeek = sessionsPerWeek();
   let when = "";
-  if (perWeek >= 0.5) {
+  if (perWeek >= 0.4) {
     const days = Math.ceil(f.sessions / perWeek * 7);
-    if (days <= 400) {
+    if (days <= 730) {
       const d = new Date(); d.setDate(d.getDate() + days);
-      const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
-      when = ` · примерно до ${fmt.format(d)}`;
+      when = " · " + humanWhen(d, days);
     }
   }
   return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} до конца${when}</span>`;
