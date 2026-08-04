@@ -3,13 +3,27 @@
 /* Главный экран — обложка, прогресс и одна кнопка;
    детали разнесены по вкладкам «Прогресс», «Награды» и «Обзор». */
 
+/* Профили: у каждого своё хранилище и свой гист.
+   Первый профиль живёт на старых ключах — иначе прежние данные потерялись бы. */
+const PROFILES = [
+  { id: "anton", name: "Антон", hint: "пианино, книги, пастель" },
+  { id: "diana", name: "Диана", hint: "свои материалы" }
+];
+const LS_PROFILE = "keiko-profile";
+let profileId = null;
+
+const profile = () => PROFILES.find(p => p.id === profileId) || PROFILES[0];
+const suffix = () => (profileId && profileId !== "anton") ? "-" + profileId : "";
+
 const LS = {
-  data: "prokachka-data-v6",
-  cfg: "prokachka-cfg-v1",
-  older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
+  get data() { return "prokachka-data-v6" + suffix(); },
+  get cfg() { return "prokachka-cfg-v1"; },        // токен и гист общие для всех профилей
+  get older() {
+    return suffix() ? [] : ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"];
+  }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 43";
+const APP_VERSION = "2026.08.03 · 44";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -175,6 +189,16 @@ function toast(text) {
 
 /* ── Хранилище ── */
 function emptyData() {
+  // у второго профиля нет наших материалов — он собирает свои
+  const own = profileId === "anton" || !profileId;
+  if (!own) return {
+    active: "piano",
+    piano: { pieces: [], activePiece: "", entries: [] },
+    book: { books: [], activeBook: "", entries: [] },
+    pastel: { course: null, entries: [] },
+    shop: { theme: "rose", purchases: [] },
+    weekGoal: 4, freezes: [], archive: []
+  };
   return {
     active: "piano",
     piano: { pieces: DEFAULT_PIECES.map(p => ({ ...p, updatedAt: 0 })), activePiece: DEFAULT_PIECES[0].id, entries: [] },
@@ -204,7 +228,13 @@ function migrate(obj) {
     })) } };
   }
 
-  if (obj.piano) {
+  const own = profileId === "anton" || !profileId;
+
+  if (obj.piano && !own) {
+    base.piano.pieces = Array.isArray(obj.piano.pieces) ? obj.piano.pieces : [];
+    base.piano.entries = obj.piano.entries || [];
+    if (obj.piano.activePiece) base.piano.activePiece = obj.piano.activePiece;
+  } else if (obj.piano) {
     // старая схема: одна композиция в piano.piece
     if (obj.piano.piece && !obj.piano.pieces) {
       // из старой схемы берём только число тактов — название и автор у нас свои
@@ -233,7 +263,11 @@ function migrate(obj) {
     }
   }
 
-  if (obj.book) {
+  if (obj.book && !own) {
+    base.book.books = Array.isArray(obj.book.books) ? obj.book.books : [];
+    base.book.entries = obj.book.entries || [];
+    if (obj.book.activeBook) base.book.activeBook = obj.book.activeBook;
+  } else if (obj.book) {
     base.book.entries = obj.book.entries || [];
     // старая схема: одна книга в book.book; новая — список books
     const saved = Array.isArray(obj.book.books) ? obj.book.books
@@ -246,7 +280,10 @@ function migrate(obj) {
     for (const extra of saved) if (!base.book.books.some(b => b.id === extra.id)) base.book.books.push(extra);
     if (obj.book.activeBook && base.book.books.some(b => b.id === obj.book.activeBook)) base.book.activeBook = obj.book.activeBook;
   }
-  if (obj.pastel) {
+  if (obj.pastel && !own) {
+    base.pastel.entries = obj.pastel.entries || [];
+    if (obj.pastel.course) base.pastel.course = obj.pastel.course;
+  } else if (obj.pastel) {
     base.pastel.entries = obj.pastel.entries || [];
     if (obj.pastel.course) base.pastel.course = Object.assign({}, DEFAULT_COURSE, obj.pastel.course, { lessons: DEFAULT_COURSE.lessons });
   }
@@ -287,7 +324,7 @@ const isPastel = () => data.active === "pastel";
 const isPiano = () => data.active === "piano";
 const trackOf = () => data[data.active];
 const piece = () => data.piano.pieces.find(p => p.id === data.piano.activePiece) || data.piano.pieces[0];
-const course = () => data.pastel.course;
+const course = () => data.pastel.course || { id: "", name: "", author: "", lessons: [] };
 const book = () => data.book.books.find(b => b.id === data.book.activeBook) || data.book.books[0];
 const bookEntriesOf = (id) => data.book.entries.filter(e => !e.deleted && (e.bookId || "snow-1") === id);
 
@@ -780,6 +817,7 @@ const flavor = () => (!isBook() && !isPastel() && PIECE_FLAVOR[piece().id]) || {
 const lastName = (author) => String(author || "").trim().split(/\s+/).pop();
 
 function achState() {
+  if (!hasMaterials()) return [];
   const s = curStats();
   const fl = flavor();
   return achList().map(a => {
@@ -1806,8 +1844,9 @@ function switchTrack(which) {
 }
 
 function syncPickers() {
+  if (!hasMaterials()) return;
   if (isBook()) pickPage = bookProgress();
-  else {
+  else if (isPiano() && piece()) {
     const bars = piece().bars;
     pickFrom = Math.min(pickFrom, bars); pickTo = Math.min(pickTo, bars);
   }
@@ -1937,9 +1976,10 @@ function railItems() {
   const out = data.piano.pieces.filter(p => !p.archived)
     .map(p => ({ track: "piano", pieceId: p.id, piece: p }));
   for (const b of data.book.books.filter(b => !b.archived)) out.push({ track: "book", bookId: b.id, book: b });
-  out.push({ track: "pastel" });
+  if (course().lessons.length) out.push({ track: "pastel" });
   return out;
 }
+const hasMaterials = () => railItems().length > 0;
 
 function activeRailIndex(items) {
   const i = items.findIndex(it => it.track === data.active &&
@@ -2054,6 +2094,7 @@ function ringHTML(pct) {
 }
 
 function renderHome() {
+  if (!hasMaterials()) { renderEmpty("Здесь появятся материалы", "Пока не добавлено ни одного: ни пьесы, ни книги, ни курса."); return; }
   const s = curStats();
   const g = goalProgress();
   const st = s.streak;
@@ -2574,7 +2615,17 @@ function summaryHTML() {
 // серия одна на всё приложение: важно заниматься каждый день, а чем — не важно
 const bestStreakAll = () => streak();
 
+function renderEmpty(title, text) {
+  $("#view").innerHTML = `
+    <div class="empty-state">
+      <div class="es-mark">稽古</div>
+      <h2>${esc(title)}</h2>
+      <p>${esc(text)}</p>
+    </div>`;
+}
+
 function renderProgress() {
+  if (!hasMaterials()) { renderEmpty("Пока нечего показывать", "Как появятся материалы, здесь будет прогресс по неделям и месяцам."); return; }
   $("#view").innerHTML = `
     <div class="panel sum-panel">
       ${summaryHTML()}
@@ -2738,6 +2789,7 @@ function renderDayBox() {
 
 // все материалы с их наградами — для входного списка
 function achMaterials() {
+  if (!hasMaterials()) return [];
   const save = data.active, savePiece = data.piano.activePiece, saveBook = data.book.activeBook;
   const out = [];
 
@@ -2758,10 +2810,11 @@ function achMaterials() {
   }
 
   data.active = "pastel";
-  let list = achState(); let f = factsState();
-  out.push({ track: "pastel", icon: "🎨", title: course().name, sub: course().author,
-    open: list.filter(a => a.done).length, total: list.length,
-    fOpen: f.filter(x => x.open).length, fTotal: f.length });
+  let list = course().lessons.length ? achState() : []; let f = course().lessons.length ? factsState() : [];
+  if (course().lessons.length)
+    out.push({ track: "pastel", icon: "🎨", title: course().name, sub: course().author,
+      open: list.filter(a => a.done).length, total: list.length,
+      fOpen: f.filter(x => x.open).length, fTotal: f.length });
 
   data.active = save; data.piano.activePiece = savePiece; data.book.activeBook = saveBook;
   return out;
@@ -2787,6 +2840,7 @@ function renderAch() {
 // входной экран: материалы и сколько наград по каждому
 function renderAchList() {
   if (achTop === "shelf") { renderShelfInto(); return; }
+  if (!hasMaterials()) { renderEmpty("Достижений пока нет", "Они появятся вместе с первым материалом."); return; }
   const mats = achMaterials();
 
   $("#view").innerHTML = `
@@ -2968,6 +3022,42 @@ function openAchSheet(a, teased, words) {
   $("#achClose").addEventListener("click", closeSheet);
 }
 
+/* ══════════ Профили ══════════ */
+
+// первый запуск: кто занимается
+function renderProfilePick() {
+  document.body.classList.add("picking");
+  $("#view").innerHTML = `
+    <div class="pick-wrap">
+      <div class="pick-head">
+        <div class="logo big"><em>Кэйко</em><i>稽古</i></div>
+        <p>У каждого свой прогресс и свои материалы. Гист при этом общий — один на двоих.</p>
+      </div>
+      <div class="pick-list">
+        ${PROFILES.map(p => `
+          <button class="pick-card" data-profile="${p.id}" type="button">
+            <span class="pc-name">${esc(p.name)}</span>
+            <span class="pc-hint">${esc(p.hint)}</span>
+          </button>`).join("")}
+      </div>
+      <div class="pick-note">Профиль можно сменить в настройках — данные останутся у каждого свои.</div>
+    </div>`;
+
+  document.querySelectorAll("[data-profile]").forEach(b =>
+    b.addEventListener("click", () => {
+      localStorage.setItem(LS_PROFILE, b.dataset.profile);
+      location.replace(location.origin + location.pathname + "?v=" + encodeURIComponent(APP_VERSION));
+    }));
+}
+
+function switchProfile() {
+  const other = PROFILES.find(p => p.id !== profileId);
+  if (!other) return;
+  if (!confirm(`Переключиться на профиль «${other.name}»?\n\nЗаписи ${profile().name} останутся на месте.`)) return;
+  localStorage.setItem(LS_PROFILE, other.id);
+  location.replace(location.origin + location.pathname + "?v=" + encodeURIComponent(APP_VERSION));
+}
+
 /* ══════════ Монеты и магазин ══════════
    Баланс считается из данных: заработано минус потрачено.
    Ничего не хранится отдельно — значит, ничто не разъедется при синхронизации. */
@@ -2975,6 +3065,15 @@ const COIN = { session: 10, streak: 2, streakCap: 10, ach: 25, fact: 5 };
 
 const THEMES = [
 { id: "dusk", name: "Сумерки", sub: "как было", cost: 0, kind: "color", dots: ["#8b7cf6", "#ffc94d", "#0d0b14"], vars: {} },
+  { id: "rose", name: "Розовый рассвет", sub: "тёплая розовая", cost: 0, kind: "color",
+    dots: ["#ff8fb8", "#ffb37a", "#170d14"],
+    vars: { "--bg": "#160c13", "--ink": "#fdeef4", "--muted": "#c095a8", "--dim": "#8a6577",
+            "--gold": "#ff8fb8", "--gold-2": "#ffb37a", "--violet": "#d98fe0",
+            "--glass": "rgba(255, 143, 184, 0.07)", "--glass-2": "rgba(255, 143, 184, 0.13)",
+            "--glass-line": "rgba(255, 143, 184, 0.2)", "--glass-hi": "rgba(255, 255, 255, 0.08)",
+            "--track": "rgba(255, 255, 255, 0.1)",
+            "--panel": "rgba(48, 24, 38, 0.55)", "--bar": "rgba(30, 15, 24, 0.74)",
+            "--sheet": "rgba(40, 20, 32, 0.85)", "--sheet-solid": "rgba(40, 20, 32, 0.95)" } },
   { id: "ink", name: "Тушь и рис", sub: "монохром", cost: 150, kind: "color",
     dots: ["#e8e3d8", "#a8a29a", "#101012"],
     vars: { "--bg": "#0e0e10", "--ink": "#f0ede6", "--muted": "#9a958c", "--dim": "#66625c",
@@ -3778,6 +3877,10 @@ function openSettingsSheet() {
   openSheet(`
     <h3>Настройки</h3>
     <p class="sub">Чтобы ничего не потерялось</p>
+    <div class="info-note prof-note">
+      Профиль: <b>${esc(profile().name)}</b> — свои материалы и прогресс, гист общий
+      <button class="btn" id="sProfile" type="button">Сменить</button>
+    </div>
     ${connected ? `
       <div class="info-note">Синхронизация через гист <b>${esc(cfg.gistId)}</b></div>
       <div class="sheet-actions">
@@ -3811,6 +3914,8 @@ function openSettingsSheet() {
 
   $("#sClose").addEventListener("click", closeSheet);
   $("#sUpdate").addEventListener("click", forceUpdate);
+  const pr = $("#sProfile");
+  if (pr) pr.addEventListener("click", () => { closeSheet(); switchProfile(); });
   bindFreezeUI();
   bindGoalUI();
   bindShakeUI();
@@ -3846,7 +3951,8 @@ async function connectGitHub(token) {
     else {
       const cr = await gh("/gists", {
         method: "POST",
-        body: JSON.stringify({ description: "Прокачка — данные", public: false, files: { [GIST_FILE]: { content: JSON.stringify(exportData()) } } })
+        body: JSON.stringify({ description: "Кэйко — данные профилей", public: false,
+          files: { [GIST_FILE]: { content: JSON.stringify({ v: 8, savedAt: now(), profiles: { [profileId]: exportData() } }) } } })
       });
       if (!cr.ok) throw new Error("Не создался гист");
       cfg.gistId = (await cr.json()).id; cfg.lastSync = now(); saveCfg();
@@ -3882,12 +3988,19 @@ async function syncNow(manual) {
     if (!r.ok) throw new Error("Ошибка сети (" + r.status + ")");
     const g = await r.json();
     const f = g.files && g.files[GIST_FILE];
+    let box = {};                       // содержимое файла целиком: { profiles: {...} }
     let remote = emptyData();
     if (f) {
       let txt = f.content;
       if (f.truncated && f.raw_url) txt = await (await fetch(f.raw_url)).text();
-      try { remote = migrate(JSON.parse(txt)); } catch {}
+      try {
+        const parsed = JSON.parse(txt);
+        // старый файл был плоским — считаем его данными первого профиля
+        box = parsed && parsed.profiles ? parsed : { profiles: { anton: parsed } };
+        remote = migrate(box.profiles[profileId] || null);
+      } catch {}
     }
+    if (!box.profiles) box = { profiles: {} };
     data.piano.entries = mergeLists(data.piano.entries, remote.piano.entries);
     data.book.entries = mergeLists(data.book.entries, remote.book.entries);
     data.pastel.entries = mergeLists(data.pastel.entries, remote.pastel.entries);
@@ -3904,9 +4017,11 @@ async function syncNow(manual) {
     const changed = JSON.stringify([data.piano, data.book, data.pastel])
       !== JSON.stringify([remote.piano, remote.book, remote.pastel]);
     if (changed) {
+      box.profiles[profileId] = exportData();     // чужой профиль в файле остаётся нетронутым
+      box.v = 8; box.savedAt = now();
       const pr = await gh("/gists/" + cfg.gistId, {
         method: "PATCH",
-        body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(exportData()) } } })
+        body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(box) } } })
       });
       if (!pr.ok) throw new Error("Не сохранилось");
     }
@@ -3931,6 +4046,9 @@ function schedulePush() {
 /* ══════════ Запуск ══════════ */
 
 function init() {
+  profileId = localStorage.getItem(LS_PROFILE);
+  if (!profileId) { renderProfilePick(); return; }   // первый запуск: кто занимается
+
   load();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
   if (["home", "progress", "ach", "shop"].includes(cfg.tab)) tab = cfg.tab;
