@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 37";
+const APP_VERSION = "2026.08.03 · 38";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -182,6 +182,7 @@ function emptyData() {
     piano: { pieces: DEFAULT_PIECES.map(p => ({ ...p, updatedAt: 0 })), activePiece: DEFAULT_PIECES[0].id, entries: [] },
     book: { books: DEFAULT_BOOKS.map(b => ({ ...b, updatedAt: 0 })), activeBook: DEFAULT_BOOKS[0].id, entries: [] },
     pastel: { course: { ...DEFAULT_COURSE, updatedAt: 0 }, entries: [] },
+    shop: { theme: "dusk", purchases: [] },   // купленные темы и мелочи
     weekGoal: 4,   // общая цель: сколько дней в неделю заниматься чем угодно
     freezes: [],   // периоды паузы: отпуск, болезнь — серия их не замечает
     archive: []    // пройденные материалы
@@ -250,6 +251,10 @@ function migrate(obj) {
   if (obj.pastel) {
     base.pastel.entries = obj.pastel.entries || [];
     if (obj.pastel.course) base.pastel.course = Object.assign({}, DEFAULT_COURSE, obj.pastel.course, { lessons: DEFAULT_COURSE.lessons });
+  }
+  if (obj.shop) {
+    if (Array.isArray(obj.shop.purchases)) base.shop.purchases = obj.shop.purchases;
+    if (typeof obj.shop.theme === "string") base.shop.theme = obj.shop.theme;
   }
   if (Number(obj.weekGoal) > 0) base.weekGoal = Math.min(7, Math.round(obj.weekGoal));
   if (Array.isArray(obj.freezes)) base.freezes = obj.freezes;
@@ -1409,12 +1414,14 @@ function factsState() {
   const finished = curStats().pct >= 100;
   const page = isBook() ? bookProgress() : 0;
 
-  return list.map((f, i) => {
+  const out = list.map((f, i) => {
     // карточка с привязкой к странице открывается, когда до неё дочитал
     if (f.page) return { ...f, id: key + ":" + i, need: f.page, unit: "page", open: page >= f.page };
     const need = Math.max(1, Math.ceil((i + 1) * span / list.length));
     return { ...f, id: key + ":" + i, need, unit: isPastel() ? "lesson" : "day", open: finished || step >= need };
   });
+
+  return out;
 }
 
 function fmtRange(from, to) {
@@ -1501,7 +1508,7 @@ function archiveCurrent() {
     const cur = book();
     cur.archived = true; cur.updatedAt = now();
     const next = data.book.books.find(b => !b.archived);
-    if (next) { data.book.activeBook = next.id; save(); render(); toast("Книга в архиве"); syncUp(); return; }
+    if (next) { data.book.activeBook = next.id; saveData(); render(); toast("Книга в архиве"); schedulePush(); return; }
 
     const title = prompt("Какую книгу читаешь теперь?", "");
     if (title === null || !title.trim()) { data.archive.pop(); cur.archived = false; return; }
@@ -1849,6 +1856,7 @@ function render() {
   $("#view").className = tab === "home" ? "fixed" : "scrolls";
   if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
+  else if (tab === "shop") renderShop();
   else renderAch();
 }
 
@@ -1870,7 +1878,8 @@ function renderTabbar() {
   $("#tabbar").innerHTML = [
     ["home", "◉", "Главная"],
     ["progress", "▤", "Прогресс"],
-    ["ach", "✦", `Достижения ${openCount}`]
+    ["ach", "✦", `Достижения ${openCount}`],
+    ["shop", "◍", `${coins()} 🪙`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
   syncTabHeight();
@@ -2952,6 +2961,155 @@ function openAchSheet(a, teased, words) {
   $("#achClose").addEventListener("click", closeSheet);
 }
 
+/* ══════════ Монеты и магазин ══════════
+   Баланс считается из данных: заработано минус потрачено.
+   Ничего не хранится отдельно — значит, ничто не разъедется при синхронизации. */
+const COIN = { session: 10, streak: 2, streakCap: 10, ach: 25, fact: 5 };
+
+const THEMES = [
+  { id: "dusk", name: "Сумерки", sub: "как было", cost: 0, dots: ["#8b7cf6", "#ffc94d", "#0d0b14"], vars: {} },
+  { id: "ink", name: "Тушь и рис", sub: "монохром, ничего лишнего", cost: 200,
+    dots: ["#e8e3d8", "#a8a29a", "#101012"],
+    vars: { "--bg": "#0e0e10", "--ink": "#f0ede6", "--muted": "#9a958c", "--dim": "#66625c",
+            "--gold": "#e8e3d8", "--gold-2": "#b9b3a8", "--violet": "#9a958c" } },
+  { id: "baikal", name: "Байкальский лёд", sub: "холодная синева", cost: 250,
+    dots: ["#7fd7e8", "#3f9fc4", "#07131c"],
+    vars: { "--bg": "#07131b", "--ink": "#eaf6fb", "--muted": "#84a2b3", "--dim": "#546f7e",
+            "--gold": "#8fdcee", "--gold-2": "#41a6c9", "--violet": "#6fb6d8",
+            "--panel": "rgba(18, 38, 50, 0.55)", "--bar": "rgba(10, 26, 36, 0.72)",
+            "--sheet": "rgba(14, 32, 44, 0.82)", "--sheet-solid": "rgba(14, 32, 44, 0.94)" } },
+  { id: "amber", name: "Тёплый вечер", sub: "лампа и чай", cost: 250,
+    dots: ["#ffb168", "#ff7a45", "#150f0b"],
+    vars: { "--bg": "#150f0b", "--ink": "#faeee2", "--muted": "#b39a86", "--dim": "#7d6a5a",
+            "--gold": "#ffb168", "--gold-2": "#ff7a45", "--violet": "#e08a5c",
+            "--panel": "rgba(46, 32, 24, 0.55)", "--bar": "rgba(30, 21, 15, 0.72)",
+            "--sheet": "rgba(38, 26, 19, 0.82)", "--sheet-solid": "rgba(38, 26, 19, 0.94)" } },
+  { id: "moss", name: "Мох", sub: "хвоя и тишина", cost: 300,
+    dots: ["#9ad9a2", "#4fae7a", "#0b130e"],
+    vars: { "--bg": "#0a130d", "--ink": "#eaf6ec", "--muted": "#8aa892", "--dim": "#5a7263",
+            "--gold": "#9ad9a2", "--gold-2": "#4fae7a", "--violet": "#78c2a4",
+            "--panel": "rgba(20, 42, 30, 0.55)", "--bar": "rgba(12, 28, 19, 0.72)",
+            "--sheet": "rgba(16, 34, 24, 0.82)", "--sheet-solid": "rgba(16, 34, 24, 0.94)" } },
+  { id: "paper", name: "Бумага", sub: "светлая тема", cost: 500, light: true,
+    dots: ["#c8862a", "#8a8478", "#f4f1ea"],
+    vars: { "--bg": "#f2efe7", "--ink": "#221f1a", "--muted": "#6b6559", "--dim": "#9a9384",
+            "--gold": "#c07d22", "--gold-2": "#e0a13d", "--violet": "#7a6bd0",
+            "--line": "rgba(0, 0, 0, 0.1)",
+            "--glass": "rgba(255, 255, 255, 0.55)", "--glass-2": "rgba(255, 255, 255, 0.8)",
+            "--glass-line": "rgba(0, 0, 0, 0.09)", "--glass-hi": "rgba(255, 255, 255, 0.9)",
+            "--panel": "rgba(255, 255, 255, 0.62)", "--bar": "rgba(248, 245, 238, 0.78)",
+            "--sheet": "rgba(250, 247, 240, 0.9)", "--sheet-solid": "rgba(250, 247, 240, 0.96)",
+            "--shadow": "rgba(90, 78, 58, 0.16)" } }
+];
+
+const themeById = (id) => THEMES.find(t => t.id === id) || THEMES[0];
+const purchases = () => (data.shop.purchases || []).filter(p => !p.deleted);
+const ownedThemes = () => new Set(["dusk", ...purchases().filter(p => p.item === "theme").map(p => p.what)]);
+
+// серия на конкретную дату — нужна для бонуса за непрерывность
+function streakOn(days, ds) {
+  let n = 0;
+  const d = fromStr(ds);
+  while (true) {
+    const cur = dateStr(d);
+    if (days.has(cur)) n++;
+    else if (isFrozen(cur)) { /* пауза не рвёт */ }
+    else break;
+    if (n > 400) break;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
+function coinsEarned() {
+  const all = [...data.piano.entries, ...data.book.entries, ...data.pastel.entries].filter(e => !e.deleted);
+  const days = new Set(all.map(e => e.date));
+
+  let sum = all.length * COIN.session;                       // каждая отмеченная сессия
+  for (const ds of days)                                      // и бонус за непрерывность
+    sum += Math.min(COIN.streakCap, streakOn(days, ds) * COIN.streak);
+
+  const mats = achMaterials();
+  sum += mats.reduce((a, m) => a + m.open, 0) * COIN.ach;     // открытые награды
+  sum += mats.reduce((a, m) => a + m.fOpen, 0) * COIN.fact;   // и карточки знаний
+  return sum;
+}
+
+const coinsSpent = () => purchases().reduce((a, p) => a + (p.cost || 0), 0);
+const coins = () => coinsEarned() - coinsSpent();
+
+function buy(item, what, cost, label) {
+  if (coins() < cost) { toast("Не хватает монет"); return false; }
+  data.shop.purchases.push({ id: uid(), item, what, cost, label, createdAt: now(), updatedAt: now() });
+  saveData();
+  toast(`Куплено: ${label} · −${cost} 🪙`);
+  schedulePush();
+  return true;
+}
+
+function applyTheme(id) {
+  const t = themeById(id);
+  const root = document.documentElement;
+  root.removeAttribute("style");
+  for (const [k, v] of Object.entries(t.vars || {})) root.style.setProperty(k, v);
+  root.style.colorScheme = t.light ? "light" : "dark";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", (t.vars && t.vars["--bg"]) || "#0d0b14");
+  syncTabHeight();
+}
+
+
+/* ── Экран «Магазин» ── */
+function renderShop() {
+  const bal = coins();
+  const owned = ownedThemes();
+  const cur = data.shop.theme || "dusk";
+
+  $("#view").innerHTML = `
+    <div class="panel wallet">
+      <div class="wal-sum"><b>${bal}</b><span>🪙 монет</span></div>
+      <div class="wal-hint">Занятие — ${COIN.session} монет, серия — до ${COIN.streakCap} сверху,
+        награда — ${COIN.ach}, карточка знаний — ${COIN.fact}</div>
+    </div>
+
+    <div class="shop-head">Темы оформления</div>
+    <div class="theme-list">
+      ${THEMES.map(t => {
+        const have = owned.has(t.id);
+        const on = cur === t.id;
+        return `
+          <div class="theme ${on ? "on" : ""}">
+            <span class="th-dots">${t.dots.map(c => `<i style="background:${c}"></i>`).join("")}</span>
+            <span class="th-txt"><b>${esc(t.name)}</b><em>${esc(t.sub)}</em></span>
+            ${on
+              ? `<span class="th-tag">выбрана</span>`
+              : have
+                ? `<button class="th-btn" data-use="${t.id}" type="button">Включить</button>`
+                : `<button class="th-btn buy ${bal < t.cost ? "off" : ""}" data-buy="${t.id}" type="button">${t.cost} 🪙</button>`}
+          </div>`;
+      }).join("")}
+    </div>
+
+
+    <div class="shop-note">Монеты капают сами: за каждое отмеченное занятие, за непрерывность,
+      за открытые награды и карточки знаний. Тратить их не обязательно — но приятно.</div>`;
+
+  document.querySelectorAll("[data-use]").forEach(b =>
+    b.addEventListener("click", () => {
+      data.shop.theme = b.dataset.use; saveData(); applyTheme(data.shop.theme);
+      renderShop(); renderTabbar(); schedulePush();
+    }));
+
+  document.querySelectorAll("[data-buy]").forEach(b =>
+    b.addEventListener("click", () => {
+      const t = themeById(b.dataset.buy);
+      if (!confirm(`Купить тему «${t.name}» за ${t.cost} монет?`)) return;
+      if (!buy("theme", t.id, t.cost, t.name)) return;
+      data.shop.theme = t.id; saveData(); applyTheme(t.id);
+      renderShop(); renderTabbar();
+    }));
+}
+
 /* ══════════ Шторка ══════════ */
 
 function openSheet(html) {
@@ -3474,7 +3632,7 @@ async function connectGitHub(token) {
   }
 }
 
-const exportData = () => ({ v: 7, savedAt: now(), active: data.active, weekGoal: data.weekGoal, piano: data.piano, book: data.book, pastel: data.pastel, freezes: data.freezes, archive: data.archive });
+const exportData = () => ({ v: 7, savedAt: now(), active: data.active, weekGoal: data.weekGoal, shop: data.shop, piano: data.piano, book: data.book, pastel: data.pastel, freezes: data.freezes, archive: data.archive });
 
 function mergeLists(local, remote) {
   const map = new Map();
@@ -3505,6 +3663,10 @@ async function syncNow(manual) {
     data.pastel.entries = mergeLists(data.pastel.entries, remote.pastel.entries);
     if (remote.weekGoal && (remote.savedAt || 0) > (cfg.lastSync || 0)) data.weekGoal = remote.weekGoal;
     data.freezes = mergeLists(data.freezes, remote.freezes);
+    if (remote.shop) {
+      data.shop.purchases = mergeLists(data.shop.purchases, remote.shop.purchases || []);
+      if (remote.shop.theme && (remote.savedAt || 0) > (cfg.lastSync || 0)) data.shop.theme = remote.shop.theme;
+    }
     data.archive = mergeLists(data.archive, remote.archive);
     saveData();
     const changed = JSON.stringify([data.piano, data.book, data.pastel])
@@ -3539,7 +3701,8 @@ function schedulePush() {
 function init() {
   load();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
-  if (["home", "progress", "ach"].includes(cfg.tab)) tab = cfg.tab;
+  if (["home", "progress", "ach", "shop"].includes(cfg.tab)) tab = cfg.tab;
+  applyTheme(data.shop.theme);
   if (["week", "month"].includes(cfg.period)) period = cfg.period;
   if (cfg.achView && cfg.achView.track) achView = cfg.achView;
   if (cfg.achTab === "facts") achTab = "facts";
