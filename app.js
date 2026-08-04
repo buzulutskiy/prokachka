@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 38";
+const APP_VERSION = "2026.08.03 · 39";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -1876,10 +1876,10 @@ function syncTabHeight() {
 function renderTabbar() {
   const openCount = achMaterials().reduce((n, m) => n + m.open, 0);
   $("#tabbar").innerHTML = [
-    ["home", "◉", "Главная"],
-    ["progress", "▤", "Прогресс"],
-    ["ach", "✦", `Достижения ${openCount}`],
-    ["shop", "◍", `${coins()} 🪙`]
+    [ "home", ICON("home", "◉"), T("tabHome")],
+    ["progress", ICON("progress", "▤"), T("tabProgress")],
+    ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`],
+    ["shop", ICON("shop", "◍"), `${coins()} ${T("coin")}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
   syncTabHeight();
@@ -2081,8 +2081,8 @@ function renderHome() {
         ${!gistReady()
           ? "🔒 Подключить синхронизацию"
           : doneToday
-            ? '<span class="cta-ok">✅ Сегодня отмечено</span><span class="cta-add">дополнить</span>'
-            : (isBook() ? "📖 Отметить чтение" : isPastel() ? "🎨 Отметить урок" : "🎹 Отметить занятие")}
+            ? `<span class="cta-ok">${T("ctaDone")}</span><span class="cta-add">${T("ctaAdd")}</span>`
+            : (isBook() ? T("ctaBook") : isPastel() ? T("ctaPastel") : T("ctaPiano"))}
       </button>
       <div class="nudge">${nudge}</div>
       <div class="shake-hint" id="shakeHint"></div>
@@ -2297,8 +2297,8 @@ function updateHeroInfo() {
     cta.innerHTML = !gistReady()
       ? "🔒 Подключить синхронизацию"
       : doneToday
-        ? '<span class="cta-ok">✅ Сегодня отмечено</span><span class="cta-add">дополнить</span>'
-        : (isBook() ? "📖 Отметить чтение" : isPastel() ? "🎨 Отметить урок" : "🎹 Отметить занятие");
+        ? `<span class="cta-ok">${T("ctaDone")}</span><span class="cta-add">${T("ctaAdd")}</span>`
+        : (isBook() ? T("ctaBook") : isPastel() ? T("ctaPastel") : T("ctaPiano"));
   }
 
   const nudge = $(".nudge");
@@ -2485,16 +2485,16 @@ function lineChartHTML(points) {
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
         <defs>
           <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="rgba(255,201,77,0.35)"/>
-            <stop offset="100%" stop-color="rgba(255,201,77,0)"/>
+            <stop offset="0%" stop-color="var(--gold)" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="var(--gold)" stop-opacity="0"/>
           </linearGradient>
         </defs>
         <line x1="${padX}" y1="${bottom + 2}" x2="${W - padX}" y2="${bottom + 2}" stroke="rgba(255,255,255,0.08)"/>
         <path d="${area}" fill="url(#lineFill)"/>
-        <path d="${path}" fill="none" stroke="#ffc94d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${path}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         ${pts.map((p, i) => (i % dotEvery === 0 || p.today) ? `
           <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.today ? 5 : 3.5}"
-            fill="${p.value ? "#ffc94d" : "#2a2438"}" stroke="${p.today ? "#fff" : "#ffc94d"}" stroke-width="${p.today ? 2 : 1.4}"
+            fill="${p.value ? "var(--gold)" : "var(--bg)"}" stroke="${p.today ? "var(--ink)" : "var(--gold)"}" stroke-width="${p.today ? 2 : 1.4}"
             opacity="${p.future ? 0.35 : 1}"/>` : "").join("")}
       </svg>
       <div class="wl-days" style="grid-template-columns: repeat(${n}, 1fr)">
@@ -2555,7 +2555,7 @@ function summaryHTML() {
       </div>
 
       <div class="sum-chips">
-        <div class="sc ${best ? "hot" : ""}"><b>🔥 ${best}</b><span>серия</span></div>
+        <div class="sc ${best ? "hot" : ""}"><b>🔥 ${best}</b><span>${T("streak")}</span></div>
         <div class="sc"><b>${st.days}</b><span>${plural(st.days, "день", "дня", "дней")}</span></div>
         <div class="sc"><b>${st.bars}</b><span>${plural(st.bars, "такт", "такта", "тактов")}</span></div>
         <div class="sc"><b>${st.pages}</b><span>страниц</span></div>
@@ -2859,8 +2859,8 @@ function renderAchMaterial(view) {
     </div>
 
     <div class="seg" id="achTabs">
-      <button data-at="ach" class="${achTab === "ach" ? "on" : ""}" type="button">✦ Достижения</button>
-      <button data-at="facts" class="${achTab === "facts" ? "on" : ""}" type="button">💡 Знания</button>
+      <button data-at="ach" class="${achTab === "ach" ? "on" : ""}" type="button">${T("segAch")}</button>
+      <button data-at="facts" class="${achTab === "facts" ? "on" : ""}" type="button">${T("segFacts")}</button>
     </div>
 
     ${achTab === "facts" ? factsBlockHTML(view) : `
@@ -2968,39 +2968,266 @@ const COIN = { session: 10, streak: 2, streakCap: 10, ach: 25, fact: 5 };
 
 const THEMES = [
   { id: "dusk", name: "Сумерки", sub: "как было", cost: 0, dots: ["#8b7cf6", "#ffc94d", "#0d0b14"], vars: {} },
-  { id: "ink", name: "Тушь и рис", sub: "монохром, ничего лишнего", cost: 200,
-    dots: ["#e8e3d8", "#a8a29a", "#101012"],
-    vars: { "--bg": "#0e0e10", "--ink": "#f0ede6", "--muted": "#9a958c", "--dim": "#66625c",
-            "--gold": "#e8e3d8", "--gold-2": "#b9b3a8", "--violet": "#9a958c" } },
-  { id: "baikal", name: "Байкальский лёд", sub: "холодная синева", cost: 250,
-    dots: ["#7fd7e8", "#3f9fc4", "#07131c"],
-    vars: { "--bg": "#07131b", "--ink": "#eaf6fb", "--muted": "#84a2b3", "--dim": "#546f7e",
-            "--gold": "#8fdcee", "--gold-2": "#41a6c9", "--violet": "#6fb6d8",
-            "--panel": "rgba(18, 38, 50, 0.55)", "--bar": "rgba(10, 26, 36, 0.72)",
-            "--sheet": "rgba(14, 32, 44, 0.82)", "--sheet-solid": "rgba(14, 32, 44, 0.94)" } },
-  { id: "amber", name: "Тёплый вечер", sub: "лампа и чай", cost: 250,
-    dots: ["#ffb168", "#ff7a45", "#150f0b"],
-    vars: { "--bg": "#150f0b", "--ink": "#faeee2", "--muted": "#b39a86", "--dim": "#7d6a5a",
-            "--gold": "#ffb168", "--gold-2": "#ff7a45", "--violet": "#e08a5c",
-            "--panel": "rgba(46, 32, 24, 0.55)", "--bar": "rgba(30, 21, 15, 0.72)",
-            "--sheet": "rgba(38, 26, 19, 0.82)", "--sheet-solid": "rgba(38, 26, 19, 0.94)" } },
-  { id: "moss", name: "Мох", sub: "хвоя и тишина", cost: 300,
-    dots: ["#9ad9a2", "#4fae7a", "#0b130e"],
-    vars: { "--bg": "#0a130d", "--ink": "#eaf6ec", "--muted": "#8aa892", "--dim": "#5a7263",
-            "--gold": "#9ad9a2", "--gold-2": "#4fae7a", "--violet": "#78c2a4",
-            "--panel": "rgba(20, 42, 30, 0.55)", "--bar": "rgba(12, 28, 19, 0.72)",
-            "--sheet": "rgba(16, 34, 24, 0.82)", "--sheet-solid": "rgba(16, 34, 24, 0.94)" } },
-  { id: "paper", name: "Бумага", sub: "светлая тема", cost: 500, light: true,
-    dots: ["#c8862a", "#8a8478", "#f4f1ea"],
-    vars: { "--bg": "#f2efe7", "--ink": "#221f1a", "--muted": "#6b6559", "--dim": "#9a9384",
-            "--gold": "#c07d22", "--gold-2": "#e0a13d", "--violet": "#7a6bd0",
-            "--line": "rgba(0, 0, 0, 0.1)",
-            "--glass": "rgba(255, 255, 255, 0.55)", "--glass-2": "rgba(255, 255, 255, 0.8)",
-            "--glass-line": "rgba(0, 0, 0, 0.09)", "--glass-hi": "rgba(255, 255, 255, 0.9)",
-            "--panel": "rgba(255, 255, 255, 0.62)", "--bar": "rgba(248, 245, 238, 0.78)",
-            "--sheet": "rgba(250, 247, 240, 0.9)", "--sheet-solid": "rgba(250, 247, 240, 0.96)",
-            "--shadow": "rgba(90, 78, 58, 0.16)" } }
+  {
+    id: "orbit", name: "Орбита", sub: "бортовой интерфейс, 1968", cost: 550,
+    dots: ["#ff7a2f", "#ffc04a", "#05060a"],
+    vars: { "--bg": "#05070c", "--ink": "#f2f4f8", "--muted": "#8b93a4", "--dim": "#5a6273",
+            "--gold": "#ff8a3d", "--gold-2": "#ffc04a", "--violet": "#5fa8ff",
+            "--glass": "rgba(255, 255, 255, 0.045)", "--glass-2": "rgba(255, 255, 255, 0.08)",
+            "--glass-line": "rgba(255, 138, 61, 0.22)", "--glass-hi": "rgba(255, 255, 255, 0.05)",
+            "--panel": "rgba(10, 14, 22, 0.62)", "--bar": "rgba(6, 9, 15, 0.78)",
+            "--sheet": "rgba(8, 12, 19, 0.88)", "--sheet-solid": "rgba(8, 12, 19, 0.96)" },
+    icons: { home: "◎", progress: "≣", ach: "◆", shop: "◍" },
+    words: { tabHome: "Пост", tabProgress: "Телеметрия", tabAch: "Допуски", tabShop: "Снабжение",
+             ctaPiano: "Зафиксировать сеанс", ctaBook: "Зафиксировать чтение", ctaPastel: "Зафиксировать урок",
+             ctaDone: "Сеанс записан", ctaAdd: "дополнить", coins: "кредитов", coin: "◍", streak: "цикл",
+             segAch: "◆ Допуски", segFacts: "◇ Данные", shopThemes: "Режимы отображения",
+             shopNote: "Кредиты начисляются автоматически: за каждый зафиксированный сеанс, за непрерывность цикла, за допуски и записи данных." },
+    css: `
+      body, button, input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+      .logo em { letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.9em; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat { border-radius: 6px; }
+      .cover { border-radius: 10px; }
+      .btn, .cta, .th-btn, .gbtn, .qbtn { border-radius: 999px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.82rem; }
+      .seg { border-radius: 999px; }
+      .seg button { border-radius: 999px; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.74rem; }
+      .tabbar button { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.6rem; }
+      .hero-title h2, .shop-head, .ach-hero-txt b { text-transform: uppercase; letter-spacing: 0.09em; }
+      .ring .fg, .sum-ring .fg { filter: drop-shadow(0 0 8px rgba(255, 138, 61, 0.6)); }
+      .panel::before {
+        content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,138,61,.5), transparent);
+      }
+      .panel { position: relative; }
+    `
+  },
+  {
+    id: "terminal", name: "Терминал", sub: "зелёный фосфор, ЭЛТ", cost: 600,
+    dots: ["#3dff88", "#12b45a", "#011106"],
+    vars: { "--bg": "#010c05", "--ink": "#c9ffdc", "--muted": "#5fbf87", "--dim": "#38805a",
+            "--gold": "#3dff88", "--gold-2": "#12b45a", "--violet": "#43e0a0",
+            "--glass": "rgba(61, 255, 136, 0.05)", "--glass-2": "rgba(61, 255, 136, 0.1)",
+            "--glass-line": "rgba(61, 255, 136, 0.28)", "--glass-hi": "rgba(61, 255, 136, 0.12)",
+            "--panel": "rgba(2, 20, 10, 0.68)", "--bar": "rgba(1, 14, 7, 0.82)",
+            "--sheet": "rgba(2, 18, 9, 0.9)", "--sheet-solid": "rgba(2, 18, 9, 0.97)" },
+    icons: { home: "▮", progress: "▤", ach: "✚", shop: "◈" },
+    words: { tabHome: "Пульт", tabProgress: "Статус", tabAch: "Метки", tabShop: "Обмен",
+             ctaPiano: "> записать сеанс", ctaBook: "> записать чтение", ctaPastel: "> записать урок",
+             ctaDone: "> запись принята", ctaAdd: "дополнить", coins: "жетонов", coin: "◈", streak: "цепочка",
+             segAch: "[ метки ]", segFacts: "[ архив ]", shopThemes: "Оболочки",
+             shopNote: "Жетоны начисляются за каждую запись в журнале, за непрерывную цепочку дней, за метки и записи архива." },
+    css: `
+      body, button, input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+      .logo em { letter-spacing: 0.16em; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat, .btn, .cta, .th-btn, .seg, .seg button { border-radius: 3px; }
+      .cover { border-radius: 6px; }
+      .btn, .cta, .th-btn { text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.8rem; }
+      .tabbar button { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.6rem; }
+      .hero-title h2, .shop-head { text-transform: uppercase; letter-spacing: 0.1em; }
+      .ring .fg, .sum-ring .fg { filter: drop-shadow(0 0 7px rgba(61, 255, 136, 0.75)); }
+      body::after {
+        content: ""; position: fixed; inset: 0; z-index: 3; pointer-events: none;
+        background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+      }
+    `
+  },
+  {
+    id: "cabinet", name: "Кабинетъ", sub: "бумага и гравюра, XIX век", cost: 550, light: true,
+    dots: ["#8a5a2b", "#c39a5f", "#efe7d6"],
+    vars: { "--bg": "#ece3d1", "--ink": "#2a2118", "--muted": "#6d6050", "--dim": "#9a8b74",
+            "--line": "rgba(60, 44, 24, 0.16)", "--track": "rgba(60, 44, 24, 0.16)",
+            "--glass": "rgba(255, 252, 245, 0.6)", "--glass-2": "rgba(255, 252, 245, 0.85)",
+            "--glass-line": "rgba(60, 44, 24, 0.18)", "--glass-hi": "rgba(255, 255, 255, 0.85)",
+            "--gold": "#8a5a2b", "--gold-2": "#c08a45", "--violet": "#6a5a86",
+            "--panel": "rgba(253, 249, 240, 0.72)", "--bar": "rgba(243, 236, 222, 0.82)",
+            "--sheet": "rgba(250, 245, 235, 0.93)", "--sheet-solid": "rgba(250, 245, 235, 0.98)",
+            "--shadow": "rgba(80, 62, 38, 0.18)" },
+    icons: { home: "✒", progress: "▤", ach: "✦", shop: "✧" },
+    words: { tabHome: "Столъ", tabProgress: "Дневникъ", tabAch: "Отличія", tabShop: "Лавка",
+             ctaPiano: "Записать упражненіе", ctaBook: "Записать чтеніе", ctaPastel: "Записать урокъ",
+             ctaDone: "Записано на сегодня", ctaAdd: "дополнить", coins: "грошей", coin: "✦", streak: "череда",
+             segAch: "✦ Отличія", segFacts: "✎ Заметки", shopThemes: "Убранство",
+             shopNote: "Гроши начисляются сами: за всякое записанное занятіе, за череду дней безъ пропусковъ, за отличія и заметки." },
+    css: `
+      body, button, input { font-family: "New York", ui-serif, Georgia, "Times New Roman", serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat { border-radius: 4px; }
+      .cover { border-radius: 5px; }
+      .btn, .cta, .th-btn, .seg, .seg button, .modes, .mode { border-radius: 4px; }
+      .shop-head, .tabbar button { letter-spacing: 0.05em; }
+      .panel { box-shadow: 0 1px 0 rgba(60, 44, 24, 0.08); border-color: rgba(60, 44, 24, 0.2); }
+      .hero-title h2 { font-weight: 700; }
+      .cta { color: #2a2118; }
+      .slot:not(.on) { opacity: 0.5; }
+      .mc-tile, .th-ic { box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 8px rgba(80,62,38,.2); }
+    `
+  },
+  {
+    id: "ukiyo", name: "Укиё-э", sub: "японская гравюра, индиго и киноварь", cost: 500,
+    dots: ["#1f3f6b", "#d4573a", "#efe6d2"], light: true,
+    vars: { "--bg": "#efe7d5", "--ink": "#1c1b1a", "--muted": "#5f5b52", "--dim": "#938d80",
+            "--line": "rgba(31, 63, 107, 0.18)", "--track": "rgba(31, 63, 107, 0.16)",
+            "--gold": "#c9452c", "--gold-2": "#e0813f", "--violet": "#1f3f6b",
+            "--glass": "rgba(255, 253, 246, 0.62)", "--glass-2": "rgba(255, 253, 246, 0.88)",
+            "--glass-line": "rgba(31, 63, 107, 0.2)", "--glass-hi": "rgba(255, 255, 255, 0.8)",
+            "--panel": "rgba(252, 248, 238, 0.74)", "--bar": "rgba(240, 232, 216, 0.84)",
+            "--sheet": "rgba(250, 245, 234, 0.94)", "--sheet-solid": "rgba(250, 245, 234, 0.98)",
+            "--shadow": "rgba(31, 63, 107, 0.16)" },
+    icons: { home: "〇", progress: "彡", ach: "❋", shop: "¤" },
+    words: { tabHome: "Мастерская", tabProgress: "Свиток", tabAch: "Печати", tabShop: "Лавка",
+             ctaPiano: "Отметить практику", ctaBook: "Отметить чтение", ctaPastel: "Отметить урок",
+             ctaDone: "Печать поставлена", ctaAdd: "дополнить", coins: "мон", coin: "¤", streak: "путь",
+             segAch: "❋ Печати", segFacts: "彡 Свитки", shopThemes: "Убранство мастерской",
+             shopNote: "Мон начисляются за каждую отмеченную практику, за непрерывный путь, за печати и свитки." },
+    css: `
+      body, button, input { font-family: "Hiragino Mincho ProN", "New York", ui-serif, Georgia, serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat, .btn, .cta, .th-btn, .seg, .seg button { border-radius: 2px; }
+      .cover { border-radius: 3px; box-shadow: 6px 6px 0 rgba(31, 63, 107, 0.18); }
+      .ach .ic, .mc-tile, .th-ic, .fcard .fi { border-radius: 50%; }
+      .cta { color: #fdf7ea; }
+      .logo em { letter-spacing: 0.04em; }
+      .panel { border-color: rgba(31, 63, 107, 0.22); }
+      .tabbar button.on i { color: #c9452c; }
+      .slot:not(.on) { opacity: 0.45; }
+    `
+  },
+  {
+    id: "avant", name: "Авангардъ", sub: "конструктивизм, плакат 1923", cost: 600,
+    dots: ["#e02b20", "#111111", "#f0ece3"], light: true,
+    vars: { "--bg": "#efeae0", "--ink": "#131313", "--muted": "#4c4c4c", "--dim": "#8a8a8a",
+            "--line": "rgba(0, 0, 0, 0.2)", "--track": "rgba(0, 0, 0, 0.14)",
+            "--gold": "#e02b20", "--gold-2": "#111111", "--violet": "#e02b20",
+            "--glass": "rgba(255, 255, 255, 0.7)", "--glass-2": "rgba(255, 255, 255, 0.92)",
+            "--glass-line": "rgba(0, 0, 0, 0.22)", "--glass-hi": "rgba(255, 255, 255, 0.9)",
+            "--panel": "rgba(255, 255, 255, 0.78)", "--bar": "rgba(19, 19, 19, 0.92)",
+            "--sheet": "rgba(250, 248, 242, 0.96)", "--sheet-solid": "rgba(250, 248, 242, 1)",
+            "--shadow": "rgba(0, 0, 0, 0.2)" },
+    icons: { home: "■", progress: "▲", ach: "●", shop: "◆" },
+    words: { tabHome: "Станок", tabProgress: "Сводка", tabAch: "Разряды", tabShop: "Распределитель",
+             ctaPiano: "Выполнить норму", ctaBook: "Выполнить норму", ctaPastel: "Выполнить норму",
+             ctaDone: "Норма выполнена", ctaAdd: "дополнить", coins: "трудодней", coin: "◆", streak: "ударность",
+             segAch: "● Разряды", segFacts: "▲ Ликбез", shopThemes: "Оформленіе",
+             shopNote: "Трудодни начисляются за каждую выполненную норму, за ударность без прогулов, за разряды и ликбез." },
+    css: `
+      body, button, input { font-family: "Helvetica Neue", Inter, "SF Pro Display", system-ui, sans-serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat, .btn, .cta, .th-btn, .seg, .seg button, .cover { border-radius: 0; }
+      .btn, .cta, .th-btn, .tabbar button, .shop-head, .hero-title h2 { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; }
+      .cta { background: #e02b20; color: #fff; }
+      .panel { border: 2px solid #131313; box-shadow: 6px 6px 0 rgba(19, 19, 19, 0.9); }
+      .mat-card, .theme { border: 2px solid #131313; }
+      .ach.open { border: 2px solid #e02b20; }
+      .tabbar button { color: #cfcac0; }
+      .tabbar button.on { color: #ff5a4d; }
+      .logo em { -webkit-text-fill-color: #e02b20; letter-spacing: -0.02em; }
+      .mc-tile, .th-ic, .ach .ic, .fcard .fi { border-radius: 0; }
+    `
+  },
+  {
+    id: "herbarium", name: "Гербарій", sub: "ботанический атлас, 1870", cost: 500,
+    dots: ["#4a6f3d", "#a8b98c", "#f3efe2"], light: true,
+    vars: { "--bg": "#f2eee1", "--ink": "#2b3026", "--muted": "#5f6b55", "--dim": "#98a08c",
+            "--line": "rgba(74, 111, 61, 0.2)", "--track": "rgba(74, 111, 61, 0.16)",
+            "--gold": "#4a6f3d", "--gold-2": "#8fa96a", "--violet": "#6d7f9c",
+            "--glass": "rgba(255, 254, 247, 0.62)", "--glass-2": "rgba(255, 254, 247, 0.9)",
+            "--glass-line": "rgba(74, 111, 61, 0.22)", "--glass-hi": "rgba(255, 255, 255, 0.85)",
+            "--panel": "rgba(253, 251, 242, 0.76)", "--bar": "rgba(242, 238, 225, 0.86)",
+            "--sheet": "rgba(252, 249, 238, 0.95)", "--sheet-solid": "rgba(252, 249, 238, 0.99)",
+            "--shadow": "rgba(74, 111, 61, 0.14)" },
+    icons: { home: "❦", progress: "❧", ach: "✿", shop: "❀" },
+    words: { tabHome: "Гербарій", tabProgress: "Наблюденія", tabAch: "Находки", tabShop: "Оранжерея",
+             ctaPiano: "Записать наблюденіе", ctaBook: "Записать наблюденіе", ctaPastel: "Записать наблюденіе",
+             ctaDone: "Занесено въ журналъ", ctaAdd: "дополнить", coins: "семянъ", coin: "❀", streak: "всходы",
+             segAch: "✿ Находки", segFacts: "❧ Замѣтки", shopThemes: "Убранство",
+             shopNote: "Сѣмена начисляются за всякое записанное наблюденіе, за всходы безъ пропусковъ, за находки и замѣтки." },
+    css: `
+      body, button, input { font-family: "New York", ui-serif, Georgia, "Iowan Old Style", serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat { border-radius: 6px; }
+      .btn, .cta, .th-btn, .seg, .seg button { border-radius: 20px; }
+      .cover { border-radius: 4px; box-shadow: 0 2px 10px rgba(74, 111, 61, 0.18); }
+      .panel { border-style: dashed; border-color: rgba(74, 111, 61, 0.35); }
+      .ach .ic, .mc-tile, .th-ic, .fcard .fi { border-radius: 50%; }
+      .hero-title h2 { font-style: italic; font-weight: 600; }
+      .cta { color: #f6f8f0; }
+      .slot:not(.on) { opacity: 0.5; }
+    `
+  },
+  {
+    id: "tape", name: "Кассета", sub: "восьмидесятые, неон и винил", cost: 650,
+    dots: ["#ff3fa4", "#41e0ff", "#120a24"],
+    vars: { "--bg": "#100722", "--ink": "#f6ecff", "--muted": "#a58fd0", "--dim": "#6d5c96",
+            "--line": "rgba(255, 63, 164, 0.22)", "--track": "rgba(255, 255, 255, 0.1)",
+            "--gold": "#ff3fa4", "--gold-2": "#41e0ff", "--violet": "#8b5cf6",
+            "--glass": "rgba(255, 255, 255, 0.05)", "--glass-2": "rgba(255, 63, 164, 0.14)",
+            "--glass-line": "rgba(255, 63, 164, 0.3)", "--glass-hi": "rgba(65, 224, 255, 0.16)",
+            "--panel": "rgba(28, 12, 52, 0.6)", "--bar": "rgba(16, 7, 34, 0.8)",
+            "--sheet": "rgba(24, 10, 46, 0.9)", "--sheet-solid": "rgba(24, 10, 46, 0.97)" },
+    icons: { home: "▶", progress: "≋", ach: "★", shop: "◉" },
+    words: { tabHome: "Дека", tabProgress: "Эквалайзер", tabAch: "Хиты", tabShop: "Прилавок",
+             ctaPiano: "Записать трек", ctaBook: "Записать трек", ctaPastel: "Записать трек",
+             ctaDone: "Трек записан", ctaAdd: "дописать", coins: "жетонов", coin: "◉", streak: "плейлист",
+             segAch: "★ Хиты", segFacts: "≋ Вкладыш", shopThemes: "Обложки",
+             shopNote: "Жетоны капают за каждый записанный трек, за непрерывный плейлист, за хиты и вкладыши." },
+    css: `
+      body, button, input { font-family: "Avenir Next", "SF Pro Display", Inter, system-ui, sans-serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat { border-radius: 14px; }
+      .btn, .cta, .th-btn, .seg, .seg button { border-radius: 999px; }
+      .cta { background: linear-gradient(100deg, #ff3fa4, #8b5cf6 55%, #41e0ff); color: #1a0733; }
+      .cover { box-shadow: 0 0 0 1px rgba(255,63,164,.35), 0 18px 44px rgba(255, 63, 164, 0.25); }
+      .logo em { background: linear-gradient(100deg, #ff3fa4, #41e0ff); -webkit-background-clip: text; background-clip: text; }
+      .ring .fg, .sum-ring .fg { filter: drop-shadow(0 0 9px rgba(255, 63, 164, 0.75)); }
+      .tabbar button.on { text-shadow: 0 0 10px rgba(255, 63, 164, 0.8); }
+      .hero-title h2 { letter-spacing: 0.02em; }
+      .ach.open { box-shadow: 0 0 18px rgba(255, 63, 164, 0.28); }
+    `
+  },
+  {
+    id: "scroll", name: "Скрипторій", sub: "манускрипт, пергамент и киноварь", cost: 700,
+    dots: ["#8c1c13", "#c9a227", "#e8dcc0"], light: true,
+    vars: { "--bg": "#e7dbbe", "--ink": "#2e2418", "--muted": "#6b5a41", "--dim": "#9c8a6b",
+            "--line": "rgba(70, 50, 25, 0.24)", "--track": "rgba(70, 50, 25, 0.18)",
+            "--gold": "#8c1c13", "--gold-2": "#c9a227", "--violet": "#4a5b7a",
+            "--glass": "rgba(252, 245, 227, 0.6)", "--glass-2": "rgba(252, 245, 227, 0.9)",
+            "--glass-line": "rgba(70, 50, 25, 0.26)", "--glass-hi": "rgba(255, 250, 235, 0.8)",
+            "--panel": "rgba(250, 242, 222, 0.76)", "--bar": "rgba(232, 220, 192, 0.88)",
+            "--sheet": "rgba(248, 240, 220, 0.96)", "--sheet-solid": "rgba(248, 240, 220, 1)",
+            "--shadow": "rgba(70, 50, 25, 0.22)" },
+    icons: { home: "✠", progress: "☙", ach: "✤", shop: "❖" },
+    words: { tabHome: "Скрипторій", tabProgress: "Лѣтопись", tabAch: "Клейма", tabShop: "Казна",
+             ctaPiano: "Вписать трудъ", ctaBook: "Вписать чтеніе", ctaPastel: "Вписать урокъ",
+             ctaDone: "Вписано въ лѣтопись", ctaAdd: "дополнить", coins: "златниковъ", coin: "❖", streak: "чреда",
+             segAch: "✤ Клейма", segFacts: "☙ Маргиналіи", shopThemes: "Убранство",
+             shopNote: "Златники начисляются за всякій вписанный трудъ, за чреду дней безъ пропусковъ, за клейма и маргиналіи." },
+    css: `
+      body, button, input { font-family: "Iowan Old Style", "New York", ui-serif, Georgia, serif; }
+      .panel, .theme, .mat-card, .fcard, .ach, .sc, .stat, .btn, .cta, .th-btn, .seg, .seg button { border-radius: 3px; }
+      .cover { border-radius: 3px; box-shadow: 0 3px 14px rgba(70, 50, 25, 0.3); }
+      .panel { border: 1px solid rgba(140, 28, 19, 0.35); box-shadow: inset 0 0 0 3px rgba(201, 162, 39, 0.18); }
+      .hero-title h2 { font-variant: small-caps; letter-spacing: 0.04em; }
+      .shop-head { font-variant: small-caps; letter-spacing: 0.08em; }
+      .cta { background: linear-gradient(140deg, #8c1c13, #c9a227); color: #fdf6e3; }
+      .ach .ic, .mc-tile, .th-ic, .fcard .fi { border-radius: 4px; }
+      .logo em { -webkit-text-fill-color: #8c1c13; }
+      .slot:not(.on) { opacity: 0.5; }
+    `
+  }
 ];
+
+/* Словарь интерфейса: тема-мир может переписать формулировки под себя */
+const WORDS_BASE = {
+  tabHome: "Главная", tabProgress: "Прогресс", tabAch: "Достижения", tabShop: "Магазин",
+  ctaPiano: "🎹 Отметить занятие", ctaBook: "📖 Отметить чтение", ctaPastel: "🎨 Отметить урок",
+  ctaDone: "✅ Сегодня отмечено", ctaAdd: "дополнить",
+  coins: "монет", coin: "🪙", streak: "серия",
+  segAch: "✦ Достижения", segFacts: "💡 Знания",
+  shopThemes: "Темы оформления", shopNote: "Монеты капают сами: за каждое отмеченное занятие, за непрерывность, за открытые награды и карточки знаний. Тратить их не обязательно — но приятно."
+};
+const ICON = (k, def) => {
+  const t = themeById(data.shop ? data.shop.theme : "dusk");
+  return (t.icons && t.icons[k]) || def;
+};
+const T = (k) => {
+  const t = themeById(data.shop ? data.shop.theme : "dusk");
+  return (t.words && t.words[k]) || WORDS_BASE[k];
+};
 
 const themeById = (id) => THEMES.find(t => t.id === id) || THEMES[0];
 const purchases = () => (data.shop.purchases || []).filter(p => !p.deleted);
@@ -3053,9 +3280,20 @@ function applyTheme(id) {
   root.removeAttribute("style");
   for (const [k, v] of Object.entries(t.vars || {})) root.style.setProperty(k, v);
   root.style.colorScheme = t.light ? "light" : "dark";
+
+  // тема-мир может менять шрифты, форму элементов и добавлять свои эффекты
+  let sheet = document.getElementById("themeCss");
+  if (!sheet) {
+    sheet = document.createElement("style");
+    sheet.id = "themeCss";
+    document.head.appendChild(sheet);
+  }
+  sheet.textContent = t.css || "";
+
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", (t.vars && t.vars["--bg"]) || "#0d0b14");
   syncTabHeight();
+  requestAnimationFrame(syncTabHeight);
 }
 
 
@@ -3067,12 +3305,12 @@ function renderShop() {
 
   $("#view").innerHTML = `
     <div class="panel wallet">
-      <div class="wal-sum"><b>${bal}</b><span>🪙 монет</span></div>
-      <div class="wal-hint">Занятие — ${COIN.session} монет, серия — до ${COIN.streakCap} сверху,
+      <div class="wal-sum"><b>${bal}</b><span>${T("coin")} ${T("coins")}</span></div>
+      <div class="wal-hint">Занятие — ${COIN.session}, непрерывность — до ${COIN.streakCap} сверху,
         награда — ${COIN.ach}, карточка знаний — ${COIN.fact}</div>
     </div>
 
-    <div class="shop-head">Темы оформления</div>
+    <div class="shop-head">${T("shopThemes")}</div>
     <div class="theme-list">
       ${THEMES.map(t => {
         const have = owned.has(t.id);
@@ -3091,8 +3329,7 @@ function renderShop() {
     </div>
 
 
-    <div class="shop-note">Монеты капают сами: за каждое отмеченное занятие, за непрерывность,
-      за открытые награды и карточки знаний. Тратить их не обязательно — но приятно.</div>`;
+    <div class="shop-note">${esc(T("shopNote"))}</div>`;
 
   document.querySelectorAll("[data-use]").forEach(b =>
     b.addEventListener("click", () => {

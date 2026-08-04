@@ -14,8 +14,8 @@
     :root {
       color-scheme: dark;
       --bg: #0d0b14;
-      --card: #17141f;
-      --card-2: #1e1a2a;
+      --card: rgba(255, 255, 255, 0.045);
+      --card-2: rgba(255, 255, 255, 0.075);
       --line: rgba(255, 255, 255, 0.08);
       --ink: #f2eefb;
       --muted: #8f89a3;
@@ -31,6 +31,7 @@
       --glass-2: rgba(255, 255, 255, 0.09);
       --glass-line: rgba(255, 255, 255, 0.09);
       --glass-hi: rgba(255, 255, 255, 0.07);
+      --track: rgba(255, 255, 255, 0.09);
       --panel: rgba(28, 24, 38, 0.55);
       --bar: rgba(20, 17, 28, 0.72);
       --sheet: rgba(26, 22, 36, 0.82);
@@ -212,7 +213,7 @@
     .sum-ring { position: relative; width: min(210px, 62vw); }
     .sum-ring svg { width: 100%; height: auto; transform: rotate(-90deg); display: block; }
     .sum-ring circle { fill: none; stroke-width: 13; stroke-linecap: round; }
-    .sum-ring .bg { stroke: rgba(255, 255, 255, 0.06); }
+    .sum-ring .bg { stroke: var(--track); }
     .sum-ring .fg { stroke: url(#grad); transition: stroke-dasharray 0.8s cubic-bezier(0.22, 1, 0.36, 1); }
     .sum-txt {
       position: absolute; inset: 0;
@@ -550,7 +551,7 @@
     .ring-wrap { display: grid; place-items: center; position: relative; }
     .ring { transform: rotate(-90deg); width: clamp(88px, 13vh, 116px); height: auto; }
     .ring circle { fill: none; stroke-width: 7; stroke-linecap: round; }
-    .ring .bg { stroke: rgba(255, 255, 255, 0.07); }
+    .ring .bg { stroke: var(--track); }
     .ring .fg { stroke: url(#grad); transition: stroke-dasharray 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
     .ring-txt {
       position: absolute;
@@ -679,7 +680,7 @@
       display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 2px;
       background: rgba(255,255,255,0.04); border-radius: 7px; padding: 3px;
     }
-    .bar { height: 18px; border-radius: 2px; background: rgba(255,255,255,0.07); }
+    .bar { height: 18px; border-radius: 2px; background: var(--track); }
     .bar.tick { margin-right: 2px; }
     .bar.l1.r { background: rgba(255, 201, 77, 0.32); }
     .bar.l2.r { background: rgba(255, 201, 77, 0.62); }
@@ -750,7 +751,7 @@
     .ach-count { display: flex; align-items: baseline; gap: 8px; }
     .ach-count b { font-size: 1.7rem; font-weight: 850; }
     .ach-count span { color: var(--muted); font-size: 0.9rem; }
-    .ach-progress { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; }
+    .ach-progress { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
     .ach-progress i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-2)); }
 
     .ach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
@@ -1253,7 +1254,7 @@
     }
     .lesson .ln {
       width: 26px; height: 26px; border-radius: 8px;
-      background: rgba(255,255,255,0.07); color: var(--muted);
+      background: var(--track); color: var(--muted);
       display: grid; place-items: center; font-size: 0.8rem; font-weight: 800;
     }
     .lesson .lt { font-size: 0.9rem; font-weight: 650; line-height: 1.25; }
@@ -1284,7 +1285,7 @@
     .lv-xp { font-size: 0.92rem; color: var(--muted); }
     .lv-xp b { color: var(--ink); font-size: 1.15rem; font-weight: 850; }
     .lv-xp span { display: block; font-size: 0.76rem; color: var(--dim); }
-    .lv-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; }
+    .lv-bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
     .lv-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-2)); transition: width 0.7s; }
     .lv-hint { font-size: 0.76rem; color: var(--dim); }
 
@@ -1298,10 +1299,11 @@
 
     .modes {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
       gap: 6px;
-      background: var(--card-2);
-      border: 1px solid var(--line);
+      background: var(--glass);
+      border: 1px solid var(--glass-line);
       border-radius: 13px;
       padding: 4px;
       margin-bottom: 12px;
@@ -1403,8 +1405,8 @@
   <svg width="0" height="0" style="position:absolute">
     <defs>
       <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#ffc94d"/>
-        <stop offset="100%" stop-color="#ff9d3f"/>
+        <stop offset="0%" stop-color="var(--gold)"/>
+        <stop offset="100%" stop-color="var(--gold-2)"/>
       </linearGradient>
     </defs>
   </svg>
