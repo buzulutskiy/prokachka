@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 46";
+const APP_VERSION = "2026.08.03 · 47";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -131,7 +131,7 @@ const DIANA_BOOKS = [
     author: "Клайв Стейплз Льюис",
     volume: "и «Баламут предлагает тост»",
     pages: 224,
-    startPage: 0,
+    startPage: 94,       // прочитаны четырнадцать писем
     art: "quill", tone: "wine",
     // страницы по оглавлению издания АСТ, «Эксклюзивная классика», 2023
     chapters: [
@@ -318,7 +318,7 @@ function migrate(obj) {
     const saved = Array.isArray(obj.book.books) ? obj.book.books : [];
     base.book.books = DIANA_BOOKS.map(def => {
       const was = saved.find(b => b.id === def.id);
-      return was ? Object.assign({}, def, was, { art: def.art, tone: def.tone, chapters: def.chapters }) : { ...def, updatedAt: 0 };
+      return was ? Object.assign({}, def, was, { art: def.art, tone: def.tone, chapters: def.chapters, startPage: def.startPage }) : { ...def, updatedAt: 0 };
     });
     for (const extra of saved) if (!base.book.books.some(b => b.id === extra.id)) base.book.books.push(extra);
     base.book.entries = obj.book.entries || [];
@@ -331,7 +331,7 @@ function migrate(obj) {
     base.book.books = DEFAULT_BOOKS.map(def => {
       const был = saved.find(b => b.id === def.id);
       // оформление обложки и оглавление всегда наши, из сохранённого берём правки пользователя
-      return был ? Object.assign({}, def, был, { art: def.art, tone: def.tone, chapters: def.chapters }) : { ...def, updatedAt: 0 };
+      return был ? Object.assign({}, def, был, { art: def.art, tone: def.tone, chapters: def.chapters, startPage: def.startPage }) : { ...def, updatedAt: 0 };
     });
     for (const extra of saved) if (!base.book.books.some(b => b.id === extra.id)) base.book.books.push(extra);
     if (obj.book.activeBook && base.book.books.some(b => b.id === obj.book.activeBook)) base.book.activeBook = obj.book.activeBook;
