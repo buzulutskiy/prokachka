@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 35";
+const APP_VERSION = "2026.08.03 · 36";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2403,17 +2403,12 @@ function paceForecast() {
   return { left, pace, sessions: Math.max(1, Math.ceil(left / pace)), unit, done: false };
 }
 
-// строка вида «≈ 12 занятий — по 18 страниц за раз»
+// короткая строка прогноза: «≈ 12 занятий до конца»
 function paceHTML() {
   const f = paceForecast();
   if (!f) return "";
   if (f.done) return `<span class="pace">Материал пройден 🎉</span>`;
-
-  const per = f.unit === "page" ? `${Math.round(f.pace)} ${plural(Math.round(f.pace), "страница", "страницы", "страниц")}`
-    : f.unit === "lesson" ? `${f.pace.toFixed(1).replace(".0", "")} ${plural(Math.round(f.pace), "урок", "урока", "уроков")}`
-    : `${Math.round(f.pace)} ${plural(Math.round(f.pace), "такт", "такта", "тактов")}, руки отдельно`;
-
-  return `<span class="pace">Таким темпом — ещё ≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")}, по ${per} за раз</span>`;
+  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} до конца</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
