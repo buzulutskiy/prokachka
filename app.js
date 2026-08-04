@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 36";
+const APP_VERSION = "2026.08.03 · 37";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2804,16 +2804,8 @@ function factsBlockHTML(view) {
   const list = withMaterial(view, () => factsState());
   if (!list.length) return `<div class="empty-note">Для этого материала карточек пока нет</div>`;
   const lessons = view.track === "pastel";
-  const byPage = list.some(f => f.unit === "page");
-  const step = withMaterial(view, () => lessons ? doneLessons().size : byPage ? bookProgress() : curStats().days);
-  const next = list.find(f => !f.open);
 
   return `
-    ${next
-      ? `<div class="facts-note">${byPage
-          ? `Прочитано до <b>${step}</b>-й страницы. Следующая ждёт на <b>${next.need}</b>-й: карточки расставлены по книге и открываются там, куда ты дочитал.`
-          : `${lessons ? "Пройдено уроков" : "Занятий с материалом"}: <b>${step}</b>. Следующая карточка — после <b>${next.need}</b>. Когда материал будет пройден, откроются все.`}</div>`
-      : `<div class="facts-note">Все карточки открыты 🎉</div>`}
     <div class="facts-grid">
       ${list.map(f => f.open
         ? `<button class="fcard open" data-fact="${esc(f.id)}" type="button">
@@ -2838,7 +2830,6 @@ function renderAchMaterial(view) {
   const title = withMaterial(view, () => isBook() ? book().title : isPastel() ? course().name : piece().name);
   const icon = view.track === "book" ? "📖" : view.track === "pastel" ? "🎨" : "🎹";
   const open = ach.filter(a => a.done).length;
-  const next = ach.find(a => !a.done && !a.secret);
   const facts = withMaterial(view, () => factsState());
   let teased = 0;
 
@@ -2856,7 +2847,6 @@ function renderAchMaterial(view) {
       <div class="ach-progress"><i style="width:${achTab === "facts"
         ? (facts.length ? facts.filter(f => f.open).length / facts.length * 100 : 0)
         : open / ach.length * 100}%"></i></div>
-      ${achTab === "ach" && next ? `<div class="ach-sub">Ближайшее: ${next.icon} <b>${esc(next.name)}</b> — ${esc(next.hint.toLowerCase())}</div>` : ""}
     </div>
 
     <div class="seg" id="achTabs">
