@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 50";
+const APP_VERSION = "2026.08.03 · 51";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -3361,24 +3361,30 @@ function renderAchList() {
 function factsBlockHTML(view) {
   const list = withMaterial(view, () => factsState());
   if (!list.length) return `<div class="empty-note">Для этого материала карточек пока нет</div>`;
+
   const lessons = view.track === "pastel";
+  const opened = list.filter(f => f.open).reverse();      // сверху — та, что открылась последней
+  const locked = list.filter(f => !f.open);
+  const next = locked[0];
+  const label = (f) => f.unit === "page"
+    ? `со страницы ${f.need}`
+    : `после ${f.need} ${lessons ? plural(f.need, "урока", "уроков", "уроков") : plural(f.need, "занятия", "занятий", "занятий")}`;
 
   return `
-    <div class="facts-grid">
-      ${list.map(f => f.open
-        ? `<button class="fcard open" data-fact="${esc(f.id)}" type="button">
-             <span class="fi">💡</span>
-             <span class="ft">${esc(f.t)}</span>
-           </button>`
-        : `<div class="fcard locked">
-             <span class="fi">🔒</span>
-             <span class="ft">${f.unit === "page"
-                ? `Со страницы ${f.need}`
-                : `После ${f.need} ${lessons
-                    ? plural(f.need, "урока", "уроков", "уроков")
-                    : plural(f.need, "занятия", "занятий", "занятий")}`}</span>
-           </div>`).join("")}
-    </div>`;
+    <div class="feed-head">${locked.length
+      ? `Впереди ещё ${locked.length} ${plural(locked.length, "карточка", "карточки", "карточек")}${next ? ` · ближайшая ${label(next)}` : ""}`
+      : "Все карточки открыты 🎉"}</div>
+
+    ${opened.length ? `<div class="feed">
+      ${opened.map(f => `
+        <article class="post">
+          <div class="post-top"><span class="fi">💡</span><h4>${esc(f.t)}</h4></div>
+          <p class="post-text">${esc(f.x)}</p>
+          ${(f.more || []).length ? `<div class="post-dig">
+            ${f.more.map(m => `<div class="dig-item">${esc(m)}</div>`).join("")}
+          </div>` : ""}
+        </article>`).join("")}
+    </div>` : ""}`;
 }
 
 // награды конкретного материала
