@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 44";
+const APP_VERSION = "2026.08.03 · 45";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -297,7 +297,7 @@ function migrate(obj) {
 
   // записи книги и курса привязываем к конкретному материалу
   base.book.entries = base.book.entries.map(e => ({ ...e, bookId: e.bookId || "snow-1" }));
-  const courseId = base.pastel.course.id || "test-drive";
+  const courseId = (base.pastel.course && base.pastel.course.id) || "test-drive";
   base.pastel.entries = base.pastel.entries.map(e => ({ ...e, courseId: e.courseId || courseId }));
 
   if (["book", "piano", "pastel"].includes(obj.active)) base.active = obj.active;
@@ -1516,6 +1516,7 @@ function weekSummary(offset = 0) {
 }
 
 function currentMaterial() {
+  if (!hasMaterials()) return { icon: "◌", title: "нет материалов", sub: "", pct: 0 };
   if (isBook()) {
     const b = book(), s = bookStats();
     return { icon: "📖", title: b.title, sub: `${s.page} из ${s.pages} стр.`, pct: s.pct };
@@ -1689,6 +1690,7 @@ function bindGoalUI() {
 }
 
 function archiveUI() {
+  if (!hasMaterials()) return "";
   const cur = currentMaterial();
   const list = (data.archive || []).filter(a => !a.deleted)
     .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
