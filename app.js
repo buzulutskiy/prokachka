@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 56";
+const APP_VERSION = "2026.08.03 · 57";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -3010,9 +3010,9 @@ function humanWhen(d, days) {
   const year = d.getFullYear() !== new Date().getFullYear() ? " " + d.getFullYear() : "";
 
   if (days <= 7) return "закончишь на этой неделе";
-  if (days <= 21) return `к ${d.getDate()} ${gen}`;
+  if (days <= 24) return `примерно к ${d.getDate()} ${gen}`;
   const part = d.getDate() <= 10 ? "началу" : d.getDate() <= 20 ? "середине" : "концу";
-  return `к ${part} ${gen}${year}`;
+  return `примерно к ${part} ${gen}${year}`;
 }
 
 // короткая строка прогноза: «≈ 12 занятий · примерно до 5 октября»
@@ -3021,10 +3021,12 @@ function paceHTML() {
   if (!f) return "";
   if (f.done) return `<span class="pace">Материал пройден 🎉</span>`;
 
-  // считаем по-хорошему: занимаешься каждый день — вот и срок. Пропустил — завтра дата сдвинется
+  // прикидка от спокойного ритма: занимаешься через день — вот и срок.
+  // Пропустил — назавтра дата сдвинется, и это нормально
+  const days = f.sessions * 2;
   const d = new Date();
-  d.setDate(d.getDate() + f.sessions);
-  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} · каждый день — ${humanWhen(d, f.sessions)}</span>`;
+  d.setDate(d.getDate() + days);
+  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} · в таком темпе ${humanWhen(d, days)}</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
