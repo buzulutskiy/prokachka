@@ -9,7 +9,7 @@ const LS = {
   older: ["prokachka-data-v5", "prokachka-data-v4", "prokachka-data-v3", "prokachka-data-v2", "prokachka-data-v1"]
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 32";
+const APP_VERSION = "2026.08.03 · 33";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -320,8 +320,16 @@ function activeFreeze() {
   return (data.freezes || []).find(f => !f.deleted && t >= f.from && t <= f.to) || null;
 }
 
+// дни, когда было занятие любым материалом — серия общая для всех хобби
+function activeDays() {
+  const out = new Set();
+  for (const e of [...data.piano.entries, ...data.book.entries, ...data.pastel.entries])
+    if (!e.deleted) out.add(e.date);
+  return out;
+}
+
 function streak() {
-  const days = new Set(entries().map(e => e.date));
+  const days = activeDays();
   let n = 0, skipped = 0;
   const d = new Date();
   if (!days.has(dateStr(d)) && !isFrozen(dateStr(d))) d.setDate(d.getDate() - 1);
@@ -2486,19 +2494,8 @@ function summaryHTML() {
     </div>`;
 }
 
-// лучшая серия среди всех хобби прямо сейчас
-function bestStreakAll() {
-  const save = data.active, savePiece = data.piano.activePiece;
-  let best = 0;
-  for (const p of data.piano.pieces.filter(x => !x.archived)) {
-    data.active = "piano"; data.piano.activePiece = p.id;
-    best = Math.max(best, streak());
-  }
-  data.active = "book"; best = Math.max(best, streak());
-  data.active = "pastel"; best = Math.max(best, streak());
-  data.active = save; data.piano.activePiece = savePiece;
-  return best;
-}
+// серия одна на всё приложение: важно заниматься каждый день, а чем — не важно
+const bestStreakAll = () => streak();
 
 function renderProgress() {
   $("#view").innerHTML = `
