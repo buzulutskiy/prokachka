@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 53";
+const APP_VERSION = "2026.08.03 · 54";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -453,10 +453,10 @@ function streakAll() {
 }
 
 function streakFrom(days) {
-  let n = 0, skipped = 0;
+  let n = 0, skipped = 0, steps = 0;
   const d = new Date();
   if (!days.has(dateStr(d)) && !isFrozen(dateStr(d))) d.setDate(d.getDate() - 1);
-  while (true) {
+  while (steps++ < 4000) {
     const ds = dateStr(d);
     if (days.has(ds)) n++;
     else if (isFrozen(ds)) skipped++;      // пауза: пропускаем день молча
@@ -2234,7 +2234,7 @@ function saveEntry() {
 
   overlayQueue = [];
   if (fresh.length) overlayQueue.push({ type: "ach", a: fresh[fresh.length - 1], count: fresh.length });
-  freshFacts.forEach(f => overlayQueue.push({ type: "fact", f }));
+  if (freshFacts.length) overlayQueue.push({ type: "facts", list: freshFacts });
 
   if (overlayQueue.length) { showNextOverlay(); return; }
   showDone(before, after, !!existing);
@@ -2246,15 +2246,23 @@ function showNextOverlay() {
   const item = overlayQueue.shift();
   if (!item) return;
   if (item.type === "ach") showCheer(item.a, item.count);
-  else showFact(item.f);
+  else showFacts(item.list);
 }
 
-// карточка знания — тот же праздничный оверлей
-function showFact(f) {
+// все новые карточки знаний — одним экраном, листаются прокруткой
+function showFacts(list) {
   $("#cheerIc").textContent = "💡";
-  $("#cheerTitle").textContent = f.t;
-  $("#cheerText").innerHTML = esc(f.x) +
-    ((f.more || []).length ? `<span class="cheer-dig">Копнуть глубже: ${esc(f.more[0])}</span>` : "");
+  $("#cheerTitle").textContent = list.length > 1
+    ? `${list.length} ${plural(list.length, "новая карточка", "новые карточки", "новых карточек")}`
+    : list[0].t;
+  $("#cheerText").innerHTML = list.length > 1
+    ? `<span class="cheer-list">${list.map(f => `
+        <span class="cheer-item">
+          <b>${esc(f.t)}</b>
+          <i>${esc(f.x)}</i>
+          ${(f.more || []).length ? `<em>→ ${esc(f.more[0])}</em>` : ""}
+        </span>`).join("")}</span>`
+    : esc(list[0].x) + ((list[0].more || []).length ? `<span class="cheer-dig">Копнуть глубже: ${esc(list[0].more[0])}</span>` : "");
   $("#cheerOk").textContent = overlayQueue.length ? "Дальше" : "Интересно!";
   $("#cheer").classList.add("show", "fact");
 }
@@ -2371,7 +2379,27 @@ function renderBanner() {
   box.innerHTML = "";
 }
 
+// если что-то упало — показываем понятный экран вместо пустоты
+function crashScreen(e) {
+  const box = $("#view");
+  if (!box) return;
+  box.innerHTML = `
+    <div class="empty-state">
+      <div class="es-mark">稽古</div>
+      <h2>Что-то пошло не так</h2>
+      <p>Данные целы — сбой в самом приложении. Нажми «Обновить», это переустановит его начисто.</p>
+      <button class="btn gold" id="crashUpd" type="button" style="max-width:260px">Обновить приложение</button>
+      <p style="font-size:0.7rem;opacity:0.6">${esc(String(e && e.message || e || ""))}</p>
+    </div>`;
+  const b = $("#crashUpd");
+  if (b) b.addEventListener("click", forceUpdate);
+}
+
 function render() {
+  try { renderInner(); } catch (e) { console.error(e); crashScreen(e); }
+}
+
+function renderInner() {
   renderSeg();
   renderBanner();
   renderTabbar();
@@ -2969,12 +2997,34 @@ function paceForecast() {
   return { left, pace, sessions: Math.max(1, Math.ceil(left / pace)), unit, done: false };
 }
 
-// короткая строка прогноза: «≈ 12 занятий до конца»
+// как часто человек берётся за этот материал: занятий в неделю за последний месяц
+function sessionsPerWeek() {
+  const days = [...new Set(entries().map(e => e.date))].sort();
+  if (days.length < 2) return 0;
+  const last = days[days.length - 1];
+  const from = new Date(fromStr(last)); from.setDate(from.getDate() - 27);
+  const recent = days.filter(d => d >= dateStr(from));
+  const span = Math.max(7, daysBetween(recent[0], last) + 1);   // хотя бы неделя, иначе темп завышен
+  return recent.length / span * 7;
+}
+
+// короткая строка прогноза: «≈ 12 занятий · примерно до 5 октября»
 function paceHTML() {
   const f = paceForecast();
   if (!f) return "";
   if (f.done) return `<span class="pace">Материал пройден 🎉</span>`;
-  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} до конца</span>`;
+
+  const perWeek = sessionsPerWeek();
+  let when = "";
+  if (perWeek >= 0.5) {
+    const days = Math.ceil(f.sessions / perWeek * 7);
+    if (days <= 400) {
+      const d = new Date(); d.setDate(d.getDate() + days);
+      const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+      when = ` · примерно до ${fmt.format(d)}`;
+    }
+  }
+  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} до конца${when}</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
@@ -3714,13 +3764,12 @@ const ownedThemes = () => new Set(["dusk", ...purchases().filter(p => p.item ===
 
 // серия на конкретную дату — нужна для бонуса за непрерывность
 function streakOn(days, ds) {
-  let n = 0;
+  let n = 0, steps = 0;
   const d = fromStr(ds);
-  while (true) {
+  while (steps++ < 800) {          // жёсткий предел шагов: пауза сама по себе счётчик не двигает
     const cur = dateStr(d);
     if (days.has(cur)) n++;
-    else if (isFrozen(cur)) { /* пауза не рвёт */ }
-    else break;
+    else if (!isFrozen(cur)) break;
     if (n > 400) break;
     d.setDate(d.getDate() - 1);
   }
@@ -4565,6 +4614,10 @@ function schedulePush() {
 /* ══════════ Запуск ══════════ */
 
 function init() {
+  try { boot(); } catch (e) { console.error(e); crashScreen(e); }
+}
+
+function boot() {
   profileId = localStorage.getItem(LS_PROFILE);
   if (!profileId) { renderProfilePick(); return; }   // первый запуск: кто занимается
 

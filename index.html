@@ -829,6 +829,13 @@
     .ach-sub { font-size: 0.84rem; color: var(--muted); line-height: 1.35; }
     .ach-sub b { color: var(--ink); }
 
+    /* несколько карточек сразу — списком с прокруткой */
+    .cheer-list { display: grid; gap: 14px; text-align: left; max-height: 52vh; overflow-y: auto; padding-right: 4px; }
+    .cheer-item { display: grid; gap: 5px; }
+    .cheer-item b { font-size: 0.94rem; font-weight: 750; line-height: 1.25; }
+    .cheer-item i { font-style: normal; font-size: 0.86rem; line-height: 1.45; color: var(--muted); }
+    .cheer-item em { font-style: normal; font-size: 0.78rem; color: var(--dim); line-height: 1.35; }
+
     .cheer.fact .cheer-ic { background: linear-gradient(140deg, #ffd977, #ffb44d); }
     .cheer.fact p { max-width: 330px; font-size: 0.92rem; }
 
@@ -1562,6 +1569,19 @@
 
   <div class="toast" id="toast"></div>
 
+  <script>
+    // аварийный сброс: открыть адрес с ?reset=1, если приложение застряло на старой версии
+    (function () {
+      if (location.search.indexOf("reset=1") < 0) return;
+      try {
+        if (navigator.serviceWorker) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+        if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k)));
+      } catch (e) {}
+      setTimeout(function () {
+        location.replace(location.origin + location.pathname + "?v=" + Date.now());
+      }, 600);
+    })();
+  </script>
   <script>
     // грузим app.js с той же меткой версии, что и страница, — иначе iOS отдаёт скрипт из своего кэша
     (function () {
