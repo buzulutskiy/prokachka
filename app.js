@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 51";
+const APP_VERSION = "2026.08.03 · 52";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -441,8 +441,18 @@ function activeDays() {
   return out;
 }
 
+// серия по конкретному материалу: занимался именно им день за днём
 function streak() {
-  const days = activeDays();
+  const days = new Set(entries().map(e => e.date));
+  return streakFrom(days);
+}
+
+// общая серия: важно заниматься каждый день, а чем — не важно
+function streakAll() {
+  return streakFrom(activeDays());
+}
+
+function streakFrom(days) {
   let n = 0, skipped = 0;
   const d = new Date();
   if (!days.has(dateStr(d)) && !isFrozen(dateStr(d))) d.setDate(d.getDate() - 1);
@@ -488,7 +498,7 @@ function pianoStats() {
     prev = e.date;
   }
   return {
-    bars, passes: p, days: list.length, streak: streak(),
+    bars, passes: p, days: list.length, streak: streak(), streakAll: streakAll(),
     touchedR, touchedL, firmR, firmL, maxPass,
     pctR: bars ? touchedR / bars * 100 : 0,
     pctL: bars ? touchedL / bars * 100 : 0,
@@ -529,7 +539,7 @@ function bookStats() {
   }
   return {
     pages: b.pages, page, pct: b.pages ? page / b.pages * 100 : 0,
-    days: list.length, streak: streak(),
+    days: list.length, streak: streak(), streakAll: streakAll(),
     maxJump, weekend, comeback, notes, reread, chapter: chapterAt(page)
   };
 }
@@ -564,7 +574,7 @@ function pastelStats() {
     lessons: c.lessons.length, done: done.size, doneSet: done,
     pct: c.lessons.length ? done.size / c.lessons.length * 100 : 0,
     totalSec, doneSec, minutes: Math.round(doneSec / 60),
-    days: list.length, streak: streak(),
+    days: list.length, streak: streak(), streakAll: streakAll(),
     weekend, comeback, notes, maxAtOnce,
     nextLesson: next < 0 ? null : next
   };
@@ -2263,7 +2273,7 @@ function showDone(before, after, wasExisting) {
   if (selectedDate !== todayStr()) { toast(fmtDay(selectedDate) + " отмечено"); return; }
   if (wasExisting) { toast("Запись дополнена"); return; }
 
-  $("#cheerIc").textContent = after.streak >= 2 ? "🔥" : "🎉";
+  $("#cheerIc").textContent = after.streakAll >= 2 ? "🔥" : "🎉";
   $("#cheerTitle").textContent = rnd(DONE_TITLES);
   let text;
   if (isBook()) {
@@ -2278,8 +2288,8 @@ function showDone(before, after, wasExisting) {
     const g = (after.touchedR + after.touchedL) - (before.touchedR + before.touchedL);
     text = g > 0 ? `+${takty(g)} к разбору, всего ${Math.round(after.pct)}%. ` : "Повторение — эти такты стали крепче. ";
   }
-  text += after.streak >= 2
-    ? `Серия — ${after.streak} ${plural(after.streak, "день", "дня", "дней")} подряд. Возвращайся завтра, будет ${after.streak + 1} 🔥`
+  text += after.streakAll >= 2
+    ? `Серия — ${after.streakAll} ${plural(after.streakAll, "день", "дня", "дней")} подряд. Возвращайся завтра, будет ${after.streakAll + 1} 🔥`
     : "Возвращайся завтра — начнём серию!";
   $("#cheerText").textContent = text;
   $("#cheer").classList.add("show");
@@ -2585,7 +2595,7 @@ function renderHome() {
   if (!hasMaterials()) { renderEmpty("Здесь появятся материалы", "Пока не добавлено ни одного: ни пьесы, ни книги, ни курса."); return; }
   const s = curStats();
   const g = goalProgress();
-  const st = s.streak;
+  const st = s.streakAll;
   const doneToday = !!entryFor(todayStr());
   const ach = achState();
   const open = ach.filter(a => a.done).length;
@@ -3101,7 +3111,7 @@ function summaryHTML() {
 }
 
 // серия одна на всё приложение: важно заниматься каждый день, а чем — не важно
-const bestStreakAll = () => streak();
+const bestStreakAll = () => streakAll();
 
 function renderEmpty(title, text) {
   $("#view").innerHTML = `
@@ -3491,8 +3501,8 @@ function openAchSheet(a, teased, words) {
   // подсказка «сколько осталось» для понятных числовых условий
   let progressLine = "";
   if (!a.done) {
-    const m = { streak3: [s.streak, 3, "дн."], streak7: [s.streak, 7, "дн."], streak14: [s.streak, 14, "дн."],
-                streak30: [s.streak, 30, "дн."], days10: [s.days, 10, "занятий"], days20: [s.days, 20, "занятий"],
+    const m = { streak3: [s.streak, 3, "дн. с этим материалом"], streak7: [s.streak, 7, "дн. с этим материалом"],
+                streak14: [s.streak, 14, "дн. с этим материалом"], streak30: [s.streak, 30, "дн. с этим материалом"], days10: [s.days, 10, "занятий"], days20: [s.days, 20, "занятий"],
                 samovar: [s.days, 10, "вечеров"] }[a.id];
     if (m) progressLine = `Сейчас: <b>${m[0]}</b> из ${m[1]} ${m[2]}`;
     else if (isBook())
@@ -4168,7 +4178,7 @@ function candidates() {
     data.active = "piano"; data.piano.activePiece = p.id;
     const s = pianoStats();
     list.push({ track: "piano", pieceId: p.id, icon: "🎹", name: p.name,
-      pct: s.pct, streak: s.streak, doneToday: !!entryFor(todayStr()) });
+      pct: s.pct, streak: s.streakAll, doneToday: !!entryFor(todayStr()) });
   }
   data.active = "book";
   const b = bookStats();
