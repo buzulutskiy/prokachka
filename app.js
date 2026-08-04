@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 52";
+const APP_VERSION = "2026.08.03 · 53";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2478,6 +2478,20 @@ function railItems() {
 }
 const hasMaterials = () => railItems().length > 0;
 
+// активным может остаться трек, материалов которого у профиля нет — переставляем на первый доступный
+function normalizeActive() {
+  const items = railItems();
+  if (!items.length) return;
+  const ok = items.some(i => i.track === data.active
+    && (i.track !== "piano" || i.pieceId === data.piano.activePiece)
+    && (i.track !== "book" || i.bookId === data.book.activeBook));
+  if (ok) return;
+  const first = items[0];
+  data.active = first.track;
+  if (first.pieceId) data.piano.activePiece = first.pieceId;
+  if (first.bookId) data.book.activeBook = first.bookId;
+}
+
 function activeRailIndex(items) {
   const i = items.findIndex(it => it.track === data.active &&
     (it.track !== "piano" || it.pieceId === data.piano.activePiece) &&
@@ -4517,6 +4531,7 @@ async function syncNow(manual) {
       }
     }
     data.archive = mergeLists(data.archive, remote.archive);
+    normalizeActive();
     saveData();
     const changed = JSON.stringify([data.piano, data.book, data.pastel])
       !== JSON.stringify([remote.piano, remote.book, remote.pastel]);
@@ -4554,6 +4569,7 @@ function init() {
   if (!profileId) { renderProfilePick(); return; }   // первый запуск: кто занимается
 
   load();
+  normalizeActive();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
   if (["home", "progress", "ach", "shop"].includes(cfg.tab)) tab = cfg.tab;
   applyTheme(data.shop.theme);
