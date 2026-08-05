@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 85";
+const APP_VERSION = "2026.08.05 · 86";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -5496,53 +5496,6 @@ function bindBackupUI() {
   }
 }
 
-// разовый перенос из читалки: кладём записи в данные — дальше они уезжают в гист сами
-async function importPack(url) {
-  toast("Загружаю…");
-  try {
-    const r = await withTimeout(fetch(url + "?ts=" + Date.now(), { cache: "no-store" }), 15000);
-    if (!r.ok) throw new Error("файл не найден");
-    const pack = await r.json();
-
-    let addedShelf = 0, addedNotes = 0;
-    const haveArch = new Set((data.archive || []).map(a => a.id));
-    for (const a of pack.archive || []) {
-      if (haveArch.has(a.id)) continue;
-      data.archive.push(a); addedShelf++;
-    }
-    const haveTh = new Set((data.thoughts || []).map(t => t.id));
-    for (const t of pack.thoughts || []) {
-      if (haveTh.has(t.id)) continue;
-      data.thoughts.push(t); addedNotes++;
-    }
-
-    saveData();
-    if (gistReady()) await syncNow(true); else schedulePush();
-    closeSheet(); render();
-    toast(addedShelf || addedNotes
-      ? `Перенесено: ${addedShelf} на полку, ${addedNotes} в мысли`
-      : "Всё уже перенесено");
-  } catch (e) {
-    toast("Не вышло: " + (e.message || "ошибка"));
-  }
-}
-
-function importUI() {
-  if (profileId !== "diana") return "";
-  return `
-    <div class="freeze">
-      <div class="fz-head">📥 <b>Перенос из читалки</b> — прочитанные книги на полку, выписки в мысли</div>
-      <div class="fz-empty">Сейчас на полке: <b>${(data.archive || []).filter(a => !a.deleted).length}</b>,
-        мыслей: <b>${(data.thoughts || []).filter(t => !t.deleted).length}</b></div>
-      <button class="btn" id="impBtn" type="button">Перенести</button>
-    </div>`;
-}
-
-function bindImportUI() {
-  const b = $("#impBtn");
-  if (b) b.addEventListener("click", () => importPack("import/diana.json"));
-}
-
 /* ══════════ Настройки: отдельный экран с разделами ══════════ */
 
 const SETTINGS_SECTIONS = [
@@ -5622,7 +5575,7 @@ function renderSettingsSection(id) {
   } else if (id === "pause") {
     body = freezeUI();
   } else if (id === "data") {
-    body = archiveBackupUI() + backupUI() + importUI();
+    body = archiveBackupUI() + backupUI();
   } else {
     body = `
       <div class="info-note">Кэйко · версия ${APP_VERSION}</div>
@@ -5664,7 +5617,6 @@ function renderSettingsSection(id) {
   bindBackupUI();
   bindArchiveBackupUI();
   bindCatalogUI();
-  bindImportUI();
   bindShakeUI();
   bindArchiveUI();
 }
