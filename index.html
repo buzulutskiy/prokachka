@@ -782,7 +782,7 @@
     }
     .post-top h4 { margin: 0; font-size: 0.94rem; font-weight: 750; line-height: 1.25; }
     .post-text { margin: 0; font-size: 0.88rem; line-height: 1.5; color: var(--ink); opacity: 0.92; }
-    .post.thought .post-text { white-space: pre-wrap; }
+    .post.thought .post-text { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.55; opacity: 1; }
     .post-dig {
       margin-top: 10px; padding-top: 10px;
       border-top: 1px solid var(--glass-line);
@@ -1301,7 +1301,12 @@
       display: flex; align-items: center; gap: 8px;
       font-size: 0.75rem; color: var(--dim);
     }
-    .th-del { margin-left: auto; color: var(--dim); font-size: 0.9rem; padding: 2px 6px; }
+    .th-act { color: var(--dim); font-size: 0.9rem; padding: 2px 6px; }
+    .th-act[data-edit] { margin-left: auto; }
+    .th-act:active { color: var(--ink); }
+    .post.thought.editing { border-color: rgba(255, 201, 77, 0.4); }
+    .th-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .th-edit-row .btn { min-height: 44px; }
     .th-form { display: grid; gap: 10px; }
     .th-lab { display: grid; gap: 6px; font-size: 0.78rem; color: var(--muted); }
     .th-lab .note-input { margin-top: 0; }

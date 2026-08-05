@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 61";
+const APP_VERSION = "2026.08.03 · 62";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -199,6 +199,7 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
+let editingThought = null; // мысль, которую сейчас правим
 let notesFocus = false;    // ставить ли курсор в поле мысли при следующем рендере
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
@@ -3695,17 +3696,33 @@ function renderNotes() {
     </div>
 
     ${list.length ? `<div class="feed">
-      ${list.map(t => `
+      ${list.map(t => t.id === editingThought ? `
+        <article class="post thought editing">
+          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}</div>
+          <textarea class="note-input th-text" id="thEdit" rows="4">${esc(t.text)}</textarea>
+          <div class="th-edit-row">
+            <button class="btn gold" data-save="${t.id}" type="button">Сохранить</button>
+            <button class="btn" data-cancel="1" type="button">Отмена</button>
+          </div>
+        </article>` : `
         <article class="post thought">
-          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}
-            <button class="th-del" data-th="${t.id}" type="button">✕</button>
+          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}${t.editedAt ? " · изменено" : ""}
+            <button class="th-act" data-edit="${t.id}" type="button">✎</button>
+            <button class="th-act" data-th="${t.id}" type="button">✕</button>
           </div>
           <p class="post-text">${esc(t.text)}</p>
         </article>`).join("")}
     </div>` : `<div class="empty-note">Здесь будут мысли, которые приходят по ходу.<br>Первую можно записать прямо сейчас.</div>`}`;
 
   const area = $("#thText");
-  if (notesFocus) { notesFocus = false; setTimeout(() => area.focus(), 60); }
+  if (editingThought) {
+    const ed = $("#thEdit");
+    if (ed) setTimeout(() => { ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length); }, 60);
+    notesFocus = false;
+  } else if (notesFocus) {
+    notesFocus = false;
+    setTimeout(() => area.focus(), 60);
+  }
 
   $("#thMat").addEventListener("change", (e) => {
     cfg.thoughtKey = e.target.value; saveCfg();
@@ -3729,6 +3746,25 @@ function renderNotes() {
     renderNotes();
     toast("Записано");
   });
+
+  document.querySelectorAll("[data-edit]").forEach(b =>
+    b.addEventListener("click", () => { editingThought = b.dataset.edit; renderNotes(); }));
+
+  document.querySelectorAll("[data-cancel]").forEach(b =>
+    b.addEventListener("click", () => { editingThought = null; renderNotes(); }));
+
+  document.querySelectorAll("[data-save]").forEach(b =>
+    b.addEventListener("click", () => {
+      const t = (data.thoughts || []).find(x => x.id === b.dataset.save);
+      const text = ($("#thEdit").value || "").trim();
+      if (!t) return;
+      if (!text) { toast("Мысль не может быть пустой"); return; }
+      t.text = text.slice(0, 2000);
+      t.updatedAt = now(); t.editedAt = now();
+      editingThought = null;
+      saveData(); schedulePush(); renderNotes();
+      toast("Изменено");
+    }));
 
   document.querySelectorAll("[data-th]").forEach(b =>
     b.addEventListener("click", () => {
