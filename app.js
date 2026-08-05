@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 81";
+const APP_VERSION = "2026.08.05 · 82";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -2500,7 +2500,7 @@ function renderInner() {
   else if (tab === "progress") renderProgress();
   else if (tab === "notes") renderNotes();
   else renderAch();
-  syncLikeFab();
+  syncNotesFabs();
 
   if (quietRender && box && keepScroll) box.scrollTop = keepScroll;   // не сбрасываем место, где человек читал
 }
@@ -3876,17 +3876,14 @@ function keyOf(m) {
 }
 const currentKey = () => isBook() ? book().id : isPastel() ? "pastel" : (piece() ? piece().id : "");
 
-/* Случайную мысль вытягивает встряхивание — как выбор материала на главной.
-   Строка над лентой объясняет это, а если движение недоступно, даёт обычную кнопку. */
+/* Строка над лентой появляется, только когда лента чем-то сужена:
+   фильтром любимых или случайной мыслью — и даёт путь обратно ко всей ленте. */
 function thoughtHintHTML() {
   if (shuffleThought)
     return `<span>🎲 Одна наугад</span><button class="th-link" id="thAll" type="button">вся лента</button>`;
   if (notesFilter === "liked")
     return `<span>♥ Только любимые</span><button class="th-link" id="thAll" type="button">вся лента</button>`;
-  if (shakeReady) return `<span>🎲 Встряхни телефон — покажу случайную мысль</span>`;
-  if (typeof window.DeviceMotionEvent === "function")
-    return `<button class="th-link" id="thShakeOn" type="button">🎲 Включить выбор встряхиванием</button>`;
-  return `<button class="th-link" id="thDice" type="button">🎲 Показать случайную мысль</button>`;
+  return "";
 }
 
 // вытянуть случайную мысль: ту же дважды подряд не показываем
@@ -3963,7 +3960,7 @@ function renderNotes() {
       </div>
     </div>
 
-    ${all.length ? `<div class="th-hint">${thoughtHintHTML()}</div>` : ""}
+    ${thoughtHintHTML() ? `<div class="th-hint">${thoughtHintHTML()}</div>` : ""}
 
     ${list.length ? `<div class="feed notes-feed">
       ${list.map(t => t.id === editingThought ? `
@@ -4023,16 +4020,6 @@ function renderNotes() {
     toast("Записано");
   });
 
-  const dice = $("#thDice");
-  if (dice) dice.addEventListener("click", shuffleRandomThought);
-
-  const shakeOn = $("#thShakeOn");
-  if (shakeOn) shakeOn.addEventListener("click", async () => {
-    const ok = await enableShake(true);
-    toast(ok ? "Готово — потряси телефон" : "Доступ к движению не разрешён");
-    renderNotes();
-  });
-
   const showAll = $("#thAll");
   if (showAll) showAll.addEventListener("click", () => {
     shuffleThought = null; notesFilter = "all";
@@ -4050,7 +4037,7 @@ function renderNotes() {
       if (notesFilter === "liked") { renderNotes(); return; }
       b.classList.toggle("on", !!t.liked);
       b.textContent = t.liked ? "♥" : "♡";
-      syncLikeFab();
+      syncNotesFabs();
     }));
 
   document.querySelectorAll("[data-edit]").forEach(b =>
@@ -4081,18 +4068,20 @@ function renderNotes() {
       saveData(); schedulePush(); renderNotes();
     }));
 
-  syncLikeFab();
+  syncNotesFabs();
 }
 
-// счётчик любимых мыслей в углу: он же переключает показ только любимых
-function syncLikeFab() {
-  const b = $("#likeFab");
-  if (!b) return;
-  const on = tab === "notes" && !settingsOpen && data && data.thoughts;
-  const n = on ? thoughts().filter(t => t.liked).length : 0;
-  b.classList.toggle("show", n > 0);
-  b.classList.toggle("on", notesFilter === "liked");
-  b.innerHTML = `<i>${notesFilter === "liked" ? "♥" : "♡"}</i><b>${n}</b>`;
+// кнопки в углу ленты мыслей: счётчик любимых и кубик со случайной записью
+function syncNotesFabs() {
+  const like = $("#likeFab"), dice = $("#diceFab");
+  if (!like || !dice) return;
+  const here = tab === "notes" && !settingsOpen && data && data.thoughts;
+  const total = here ? thoughts().length : 0;
+  const n = here ? thoughts().filter(t => t.liked).length : 0;
+  like.classList.toggle("show", n > 0);
+  like.classList.toggle("on", notesFilter === "liked");
+  like.innerHTML = `<i>${notesFilter === "liked" ? "♥" : "♡"}</i><b>${n}</b>`;
+  dice.classList.toggle("show", total > 1);
 }
 
 // материал в том виде, в каком его понимает withMaterial
@@ -4725,8 +4714,6 @@ function handleShake(e) {
     if ($("#sheet")?.classList.contains("show")) return;
     if ($("#cheer")?.classList.contains("show")) return;
     if (navigator.vibrate) navigator.vibrate(25);
-    // в мыслях встряхивание вытягивает случайную запись, а не материал
-    if (tab === "notes" && !settingsOpen) { shuffleRandomThought(); return; }
     rollDice();
   }
 }
@@ -5345,8 +5332,13 @@ function boot() {
     notesFilter = notesFilter === "liked" ? "all" : "liked";
     shuffleThought = null;
     renderNotes();
-    syncLikeFab();
     if (view) view.scrollTop = 0;
+  });
+
+  const diceFab = $("#diceFab");
+  if (diceFab) diceFab.addEventListener("click", () => {
+    if (navigator.vibrate) navigator.vibrate(15);
+    shuffleRandomThought();
   });
 
   window.addEventListener("online", () => {

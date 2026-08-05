@@ -1472,7 +1472,7 @@
     .th-hint {
       display: flex; align-items: center; justify-content: center; gap: 8px;
       flex-wrap: wrap;
-      margin: 12px 0 2px;
+      margin: 10px 0 14px;
       font-size: 0.76rem; color: var(--dim); text-align: center;
     }
     /* внизу ленты остаётся место под плавающие кнопки */
@@ -1583,13 +1583,17 @@
     .to-top:active { transform: scale(0.92); }
     body.picking .to-top { display: none; }
 
-    /* счётчик любимых мыслей — в углу, симметрично кнопке «наверх» */
-    .like-fab {
+    /* кнопки ленты мыслей — в углу, симметрично кнопке «наверх» */
+    .fabs {
       position: fixed; left: 16px; z-index: 5;
       bottom: calc(var(--tab-h, 72px) + 14px);
+      display: flex; align-items: center; gap: 8px;
+      pointer-events: none;
+    }
+    .fab {
       min-width: 44px; height: 44px; padding: 0 13px;
       border-radius: 22px;
-      display: flex; align-items: center; gap: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
       font-size: 0.86rem; font-weight: 700; color: var(--ink);
       background: var(--glass-2);
       backdrop-filter: blur(18px) saturate(1.4);
@@ -1600,12 +1604,14 @@
       pointer-events: none;
       transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .like-fab.show { opacity: 1; transform: none; pointer-events: auto; }
-    .like-fab:active { transform: scale(0.94); }
-    .like-fab i { font-style: normal; font-size: 1.02rem; color: #ff5f7e; line-height: 1; }
+    .fab.show { opacity: 1; transform: none; pointer-events: auto; }
+    .fab:active { transform: scale(0.94); }
+    .fab i { font-style: normal; font-size: 1.02rem; line-height: 1; }
+    .like-fab i { color: #ff5f7e; }
     .like-fab.on { background: #ff5f7e; border-color: transparent; color: #2a0d13; }
     .like-fab.on i { color: #2a0d13; }
-    body.picking .like-fab { display: none; }
+    .dice-fab { padding: 0; }
+    body.picking .fabs { display: none; }
 
     /* ── Праздник ────────────────────── */
     .cheer {
@@ -1851,7 +1857,10 @@
   </div>
 
   <button class="to-top" id="toTop" type="button" aria-label="Наверх">↑</button>
-  <button class="like-fab" id="likeFab" type="button" aria-label="Только любимые"><i>♡</i><b>0</b></button>
+  <div class="fabs" id="fabs">
+    <button class="fab like-fab" id="likeFab" type="button" aria-label="Только любимые"><i>♡</i><b>0</b></button>
+    <button class="fab dice-fab" id="diceFab" type="button" aria-label="Случайная мысль"><i>🎲</i></button>
+  </div>
 
   <div class="toast" id="toast"></div>
 
