@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 86";
+const APP_VERSION = "2026.08.05 · 87";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -5101,12 +5101,16 @@ function restoreBackup(file) {
    Отдельный гист, чтобы не тащить его при каждой синхронизации данных.
    Тексты — одним файлом, обложки — по файлу на материал, чтобы ни один не разросся. */
 
-const CAT_FILE = "catalog.json";
+const CAT_FILE = "keiko-catalog.json";   // имя своё: catalog.json бывает у других приложений
 const CAT_COVER_FILE = (id) => `cover-${id}.txt`;
 const CAT_EVERY = 24 * 3600e3;
 
 async function ensureCatalogGist(create) {
-  if (cfg.catalogId) return cfg.catalogId;
+  if (cfg.catalogId) {
+    const cur = await gh("/gists/" + cfg.catalogId);
+    if (cur.ok && ((await cur.json()).files || {})[CAT_FILE]) return cfg.catalogId;
+    cfg.catalogId = ""; saveCfg();          // прошлый id мог указывать на чужой гист
+  }
   const r = await gh("/gists?per_page=100");
   if (!r.ok) throw new Error("список гистов недоступен");
   const found = (await r.json()).find(g => g.files && g.files[CAT_FILE]);
@@ -5244,6 +5248,7 @@ async function catalogPush(ids) {
   }
 
   pack.savedAt = now();
+  pack.profiles = PROFILES;            // имена профилей тоже часть каталога, а не кода
   files[CAT_FILE] = { content: JSON.stringify(pack) };
   const up = await gh("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files }) });
   if (!up.ok) throw new Error("каталог не записался");
