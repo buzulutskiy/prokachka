@@ -1108,6 +1108,23 @@
     }
     textarea.note-input { padding: 11px 13px; line-height: 1.45; }
     .note-input::placeholder { color: var(--dim); }
+
+    /* контролы: iOS рисует их по-своему — приводим к одному виду */
+    input.note-input, textarea.note-input, select.note-input {
+      -webkit-appearance: none; appearance: none;
+      font-family: inherit; color: var(--ink);
+      max-width: 100%;
+    }
+    input[type="date"].note-input {
+      width: 100%; min-width: 0; height: 46px;
+      text-align: left; display: block;
+    }
+    /* без этого iOS прижимает дату к правому краю */
+    input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+    input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.55; margin-left: auto; }
+    input[type="date"]::-webkit-datetime-edit { padding: 0; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .note-input:focus { border-color: rgba(139, 124, 246, 0.6); }
 
     .sheet-actions { display: grid; gap: 9px; margin-top: 18px; }

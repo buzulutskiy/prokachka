@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 70";
+const APP_VERSION = "2026.08.03 · 71";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -4068,8 +4068,10 @@ function openAddBookSheet() {
       <input class="note-input" id="abTitle" placeholder="Название" maxlength="120">
       <input class="note-input" id="abAuthor" placeholder="Автор" maxlength="120">
       <input class="note-input" id="abPages" type="number" inputmode="numeric" min="1" max="9999" placeholder="Сколько страниц">
-      <label class="ab-lab">Начал(а)<input class="note-input" id="abFrom" type="date" max="2100-01-01"></label>
-      <label class="ab-lab">Закончил(а)<input class="note-input" id="abTo" type="date" max="2100-01-01" value="${todayStr()}"></label>
+      <label class="ab-lab">Начал(а) — если помнишь
+        <input class="note-input" id="abFrom" type="date" max="2100-01-01"></label>
+      <label class="ab-lab">Закончил(а)
+        <input class="note-input" id="abTo" type="date" max="2100-01-01" value="${todayStr()}"></label>
     </div>
     <div class="sheet-actions">
       <button class="btn gold" id="abSave" type="button">На полку</button>
