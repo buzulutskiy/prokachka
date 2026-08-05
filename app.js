@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 77";
+const APP_VERSION = "2026.08.05 · 78";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -2660,16 +2660,107 @@ function toneOf(item) {
 }
 
 let bgLayer = 0;
-function paintBackdrop(item) {
+/* Цвет подложки берём из самой обложки: раскладываем картинку на 24×24,
+   считаем корзины по цвету и выбираем самую заметную — частую и живую. */
+const coverTones = new Map();
+
+// подчищаем тона, посчитанные прошлой версией алгоритма
+try { Object.keys(localStorage).forEach(k => { if (k.startsWith("keiko-tone-")) localStorage.removeItem(k); }); } catch {}
+
+function readCoverTones(url) {
+  if (coverTones.has(url)) return coverTones.get(url);
+  coverTones.set(url, null);                       // чтобы не считать дважды
+
+  try { const saved = JSON.parse(localStorage.getItem("keiko-tone2-" + url) || "null");
+    if (saved) { coverTones.set(url, saved); return saved; } } catch {}
+
+  const img = new Image();
+  img.decoding = "async";
+  img.onload = () => {
+    try {
+      const N = 24;
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = N;
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, N, N);
+      const d = ctx.getImageData(0, 0, N, N).data;
+
+      const box = new Map();
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+        const cur = box.get(key) || { n: 0, r: 0, g: 0, b: 0 };
+        cur.n++; cur.r += r; cur.g += g; cur.b += b;
+        box.set(key, cur);
+      }
+
+      // оцениваем каждую корзину: частота, насыщенность и «не слишком тёмная»
+      const score = (c) => {
+        const r = c.r / c.n, g = c.g / c.n, b = c.b / c.n;
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        const sat = mx ? (mx - mn) / mx : 0;
+        const lum = (mx + mn) / 510;
+        const fit = lum > 0.12 && lum < 0.92 ? 1 : 0.25;
+        return { s: c.n * (0.25 + sat * 1.6) * fit, r, g, b, sat, lum };
+      };
+      const ranked = [...box.values()].map(score).sort((a, b) => b.s - a.s);
+      if (!ranked.length) return;
+
+      // от обложки берём оттенок, а яркость и живость задаём сами:
+      // тёмно-фиолетовый корешок сам по себе на тёмном фоне не виден
+      const toHsl = (r, g, b) => {
+        r /= 255; g /= 255; b /= 255;
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+        let h = 0;
+        if (d) h = 60 * (mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4);
+        const l = (mx + mn) / 2;
+        return { h, s: d ? d / (1 - Math.abs(2 * l - 1)) : 0, l };
+      };
+      const toRgb = (h, s, l) => {
+        const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+        const v = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+                : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+        return v.map(n => Math.round((n + m) * 255)).join(", ");
+      };
+      const glow = (c, l) => {
+        const t = toHsl(c.r, c.g, c.b);
+        const s = t.s < 0.07 ? 0.06 : Math.min(0.72, Math.max(0.4, t.s));
+        return toRgb(t.h, s, l);
+      };
+
+      const main = ranked[0];
+      const hue = (c) => toHsl(c.r, c.g, c.b).h;
+      const dh = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+      // второй цвет — заметно другого оттенка, иначе просто светлее первого
+      const other = ranked.find(c => c.s > main.s * 0.12 && dh(hue(c), hue(main)) > 35);
+      const pair = [glow(main, 0.58), other ? glow(other, 0.62) : glow(main, 0.72)];
+
+      coverTones.set(url, pair);
+      try { localStorage.setItem("keiko-tone2-" + url, JSON.stringify(pair)); } catch {}
+      paintBackdrop(lastPainted, true);            // перекрашиваем, когда цвет посчитан
+    } catch {}
+  };
+  img.src = url;
+  return null;
+}
+
+let lastPainted = null;
+
+function paintBackdrop(item, force) {
   const layers = document.querySelectorAll(".bgfx i");
-  if (layers.length < 2) return;
-  const [c1, c2] = TONES[toneOf(item)] || TONES.violet;
+  if (layers.length < 2 || !item) return;
+  lastPainted = item;
+
+  const src = item.track === "book" ? (item.book || book()) : item.track === "piano" ? (item.piece || piece()) : null;
+  const fromCover = src && src.cover ? readCoverTones(src.cover) : null;
+  const [c1, c2] = fromCover || TONES[toneOf(item)] || TONES.violet;
   const css =
     `radial-gradient(980px 560px at 78% -12%, rgba(${c1}, 0.32), transparent 62%),` +
     `radial-gradient(760px 460px at -6% 4%, rgba(${c2}, 0.18), transparent 58%),` +
     `radial-gradient(760px 420px at 52% 110%, rgba(${c1}, 0.16), transparent 60%)`;
 
-  if (layers[bgLayer].style.backgroundImage === css) return;   // тот же тон — не трогаем
+  if (!force && layers[bgLayer].style.backgroundImage === css) return;   // тот же тон — не трогаем
+  if (force && layers[bgLayer].style.backgroundImage === css) return;
   const next = layers[bgLayer ^ 1];
   next.style.backgroundImage = css;
   next.classList.add("on");
