@@ -536,6 +536,21 @@
         linear-gradient(105deg, rgba(255, 255, 255, 0.14), transparent 42%),
         linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.22));
     }
+    /* настоящая обложка: пропорции издания, ничего не обрезается */
+    .cover.photo {
+      height: 100%; width: auto;
+      padding: 0;
+      background: #0c0a12;
+      display: block;
+    }
+    .cover.photo img {
+      width: 100%; height: 100%;
+      object-fit: cover;              /* пропорции заданы точно, так что кадрировать нечего */
+      display: block;
+      border-radius: inherit;
+    }
+    .shelf-cover.photo { width: 92px; height: auto; }
+
     .cover.book {
       background: linear-gradient(165deg, #232b3d, #131722 60%, #0f1219);
     }

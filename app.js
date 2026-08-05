@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 74";
+const APP_VERSION = "2026.08.03 · 75";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -133,6 +133,7 @@ const DIANA_BOOKS = [
     pages: 224,
     startPage: 94,       // прочитаны четырнадцать писем
     art: "quill", tone: "wine",
+    cover: "covers/screwtape.jpg", ratio: "465 / 720",
     // страницы по оглавлению издания АСТ, «Эксклюзивная классика», 2023
     chapters: [
       { name: "Предисловие", from: 7 },
@@ -180,6 +181,7 @@ const DIANA_BOOKS = [
     pages: 384,
     startPage: 0,
     art: "lamp", tone: "night",
+    cover: "covers/unizhennye.jpg", ratio: "426 / 720",
     chapters: [
       { name: "Часть первая", from: 5 },
       { name: "Часть вторая", from: 96 },
@@ -2591,6 +2593,10 @@ function activeRailIndex(items) {
 function coverOf(item) {
   if (item.track === "book") {
     const b = item.book || book();
+    if (b.cover) return `
+      <div class="cover photo" style="aspect-ratio:${esc(b.ratio || "3 / 4.4")}">
+        <img src="${esc(b.cover)}" alt="${esc(b.title)}" decoding="async" fetchpriority="high">
+      </div>`;
     return `
       <div class="cover book ${esc(b.tone || "sea")}">
         <div><div class="cv-author">${esc(b.author || "")}</div></div>
@@ -4000,6 +4006,11 @@ const shelfItems = () => (data.archive || []).filter(a => !a.deleted)
   .sort((a, b) => a.finishedAt < b.finishedAt ? 1 : -1);
 
 function shelfCoverHTML(a) {
+  const own = [...data.book.books, ...(data.piano.pieces || [])].find(x => "bk_" + x.id === a.id || x.id === a.id);
+  if (own && own.cover) return `
+    <div class="cover photo shelf-cover" style="aspect-ratio:${esc(own.ratio || "3 / 4.4")}">
+      <img src="${esc(own.cover)}" alt="${esc(a.title)}" loading="lazy" decoding="async">
+    </div>`;
   const cls = a.track === "book" ? `book ${a.tone || "sea"}`
     : a.track === "pastel" ? "pastel"
     : `piano ${a.tone || "violet"}`;
