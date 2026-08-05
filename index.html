@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0d0b14">
   <title>Кэйко</title>
   <link rel="manifest" href="manifest.webmanifest">
@@ -41,6 +41,18 @@
 
     :root { --safe-b: env(safe-area-inset-bottom, 0px); }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { touch-action: manipulation; }            /* двойной тап больше не приближает */
+    body {
+      touch-action: manipulation;
+      overscroll-behavior: none;                     /* и не оттягивается за край, как страница */
+      -webkit-user-select: none; user-select: none;  /* интерфейс не выделяется, как в родном приложении */
+    }
+    /* а вот тексты, которые хочется скопировать, выделяются как обычно */
+    .post-text, .th-meta, .lf-review, .cheer-item, .dig-item, #cheerText,
+    .note-input, input, textarea, select {
+      -webkit-user-select: text; user-select: text;
+    }
+    button, .tabbar, .slot, .cover { -webkit-touch-callout: none; }
     html, body { margin: 0; }
     html { height: 100%; }
 
@@ -1632,6 +1644,21 @@
 
   <div class="toast" id="toast"></div>
 
+  <script>
+    // iOS иногда всё равно пытается приблизить — гасим жесты руками
+    (function () {
+      ["gesturestart", "gesturechange", "gestureend"].forEach(function (ev) {
+        document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      var last = 0;
+      document.addEventListener("touchend", function (e) {
+        var now = Date.now();
+        if (now - last < 320) e.preventDefault();    // второй тап подряд — не зум, а просто тап
+        last = now;
+      }, { passive: false });
+      document.addEventListener("dblclick", function (e) { e.preventDefault(); }, { passive: false });
+    })();
+  </script>
   <script>
     // аварийный сброс: открыть адрес с ?reset=1, если приложение застряло на старой версии
     (function () {
