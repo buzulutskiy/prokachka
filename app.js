@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 67";
+const APP_VERSION = "2026.08.03 · 68";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2433,20 +2433,36 @@ function crashScreen(e) {
   });
 }
 
-function render() {
+// снимок данных: если синхронизация ничего не изменила, перерисовывать нечего
+const dataStamp = () => [
+  data.piano.entries, data.book.entries, data.pastel.entries,
+  data.thoughts || [], data.archive || [], data.freezes || []
+].map(list => list.length + ":" + list.reduce((m, e) => Math.max(m, e.updatedAt || 0), 0)).join("|")
+  + "|" + data.active + "|" + data.piano.activePiece + "|" + data.book.activeBook + "|" + (data.shop.theme || "");
+
+let quietRender = false;   // перерисовка без анимаций — например, после фоновой синхронизации
+
+function render(quiet) {
+  quietRender = !!quiet;
   try { renderInner(); } catch (e) { console.error(e); crashScreen(e); }
+  quietRender = false;
 }
 
 function renderInner() {
+  const box = $("#view");
+  const keepScroll = box ? box.scrollTop : 0;
+
   renderSeg();
   renderBanner();
   renderTabbar();
   // главная всегда влезает в экран, остальные вкладки скроллятся внутри себя
-  $("#view").className = tab === "home" ? "fixed" : "scrolls";
+  $("#view").className = (tab === "home" ? "fixed" : "scrolls") + (quietRender ? " quiet" : "");
   if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
   else if (tab === "notes") renderNotes();
   else renderAch();
+
+  if (quietRender && box && keepScroll) box.scrollTop = keepScroll;   // не сбрасываем место, где человек читал
 }
 
 function renderSeg() {
@@ -4709,6 +4725,7 @@ async function syncNow(manual) {
   if (!cfg.token || !cfg.gistId || syncing) { if (manual && !cfg.token) openSettingsSheet(); return; }
   if (!navigator.onLine) { online = false; setSyncDot("off"); renderBanner(); return; }
   syncing = true; setSyncDot("busy");
+  const stampBefore = dataStamp();
   try {
     const r = await gh("/gists/" + cfg.gistId);
     if (!r.ok) throw new Error("Ошибка сети (" + r.status + ")");
@@ -4755,7 +4772,9 @@ async function syncNow(manual) {
     }
     cfg.lastSync = now(); saveCfg(); setSyncDot("ok");
     syncError = "";
-    syncPickers(); render();
+    syncPickers();
+    if (stampBefore !== dataStamp()) render(true);   // тихо и только если данные правда изменились
+    else renderBanner();
     if (manual) toast("Синхронизировано");
   } catch (e) {
     if (!navigator.onLine) { online = false; setSyncDot("off"); renderBanner(); return; }
@@ -4807,6 +4826,19 @@ function boot() {
       if (broken === "1") return;
       navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
     }, 2500);
+  }
+
+  // длинные ленты: кнопка возврата к началу
+  const view = $("#view"), top = $("#toTop");
+  if (view && top) {
+    view.addEventListener("scroll", () => {
+      top.classList.toggle("show", view.scrollTop > 420);
+    }, { passive: true });
+    top.addEventListener("click", () => {
+      view.scrollTo({ top: 0, behavior: "smooth" });
+      // если плавная прокрутка не поддержана — доводим сами
+      setTimeout(() => { if (view.scrollTop > 0) view.scrollTop = 0; }, 600);
+    });
   }
 
   window.addEventListener("online", () => {
