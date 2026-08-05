@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 60";
+const APP_VERSION = "2026.08.03 · 61";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2411,7 +2411,6 @@ function renderInner() {
   if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
   else if (tab === "notes") renderNotes();
-  else if (tab === "shop") renderShop();
   else renderAch();
 }
 
@@ -2434,8 +2433,7 @@ function renderTabbar() {
     [ "home", ICON("home", "◉"), T("tabHome")],
     ["progress", ICON("progress", "▤"), T("tabProgress")],
     ["notes", ICON("notes", "✎"), T("tabNotes")],
-    ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`],
-    ["shop", ICON("shop", "◍"), `${coins()} ${T("coin")}`]
+    ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
   syncTabHeight();
@@ -3674,6 +3672,8 @@ function renderNotes() {
 
   const list = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+  const clock = new Intl.DateTimeFormat("ru", { hour: "2-digit", minute: "2-digit" });
+  const when = (t) => fmt.format(fromStr(t.date)) + (t.createdAt ? ", " + clock.format(new Date(t.createdAt)) : "");
   const titleOf = (t) => {
     const m = mats.find(x => keyOf(x) === t.key);
     return m ? `${m.icon} ${m.title}` : "📎 архив";
@@ -3683,9 +3683,13 @@ function renderNotes() {
     <div class="panel th-panel">
       <textarea class="note-input th-text" id="thText" rows="3" placeholder="Что подумалось?"></textarea>
       <div class="th-row">
-        <select class="note-input th-pick" id="thMat">
-          ${mats.map(m => `<option value="${esc(keyOf(m))}" ${keyOf(m) === key ? "selected" : ""}>${m.icon} ${esc(m.title)}</option>`).join("")}
-        </select>
+        <span class="th-select">
+          <span class="ts-label">${cur.icon} ${esc(cur.title)}</span>
+          <span class="ts-arrow">▾</span>
+          <select id="thMat" aria-label="Материал">
+            ${mats.map(m => `<option value="${esc(keyOf(m))}" ${keyOf(m) === key ? "selected" : ""}>${m.icon} ${esc(m.title)}</option>`).join("")}
+          </select>
+        </span>
         <button class="btn gold th-send" id="thSave" type="button">Записать</button>
       </div>
     </div>
@@ -3693,7 +3697,7 @@ function renderNotes() {
     ${list.length ? `<div class="feed">
       ${list.map(t => `
         <article class="post thought">
-          <div class="th-meta">${esc(titleOf(t))} · ${esc(fmt.format(fromStr(t.date)))}
+          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}
             <button class="th-del" data-th="${t.id}" type="button">✕</button>
           </div>
           <p class="post-text">${esc(t.text)}</p>
@@ -3742,8 +3746,6 @@ const viewOf = (m) => ({ track: m.track, pieceId: m.pieceId || null, bookId: m.b
 /* ══════════ Монеты и магазин ══════════
    Баланс считается из данных: заработано минус потрачено.
    Ничего не хранится отдельно — значит, ничто не разъедется при синхронизации. */
-const COIN = { session: 10, streak: 2, streakCap: 10, ach: 25, fact: 5 };
-
 const THEMES = [
 { id: "dusk", name: "Сумерки", sub: "как было", cost: 0, kind: "color", dots: ["#8b7cf6", "#ffc94d", "#0d0b14"], vars: {} },
   { id: "rose", name: "Розовый рассвет", sub: "тёплая розовая", cost: 0, kind: "color",
@@ -3872,48 +3874,6 @@ const T = (k) => {
 
 
 const themeById = (id) => THEMES.find(t => t.id === id) || THEMES[0];
-const purchases = () => (data.shop.purchases || []).filter(p => !p.deleted);
-const ownedThemes = () => new Set(["dusk", ...purchases().filter(p => p.item === "theme").map(p => p.what)]);
-
-// серия на конкретную дату — нужна для бонуса за непрерывность
-function streakOn(days, ds) {
-  let n = 0, steps = 0;
-  const d = fromStr(ds);
-  while (steps++ < 800) {          // жёсткий предел шагов: пауза сама по себе счётчик не двигает
-    const cur = dateStr(d);
-    if (days.has(cur)) n++;
-    else if (!isFrozen(cur)) break;
-    if (n > 400) break;
-    d.setDate(d.getDate() - 1);
-  }
-  return n;
-}
-
-function coinsEarned() {
-  const all = [...data.piano.entries, ...data.book.entries, ...data.pastel.entries].filter(e => !e.deleted);
-  const days = new Set(all.map(e => e.date));
-
-  let sum = all.length * COIN.session;                       // каждая отмеченная сессия
-  for (const ds of days)                                      // и бонус за непрерывность
-    sum += Math.min(COIN.streakCap, streakOn(days, ds) * COIN.streak);
-
-  const mats = achMaterials();
-  sum += mats.reduce((a, m) => a + m.open, 0) * COIN.ach;     // открытые награды
-  sum += mats.reduce((a, m) => a + m.fOpen, 0) * COIN.fact;   // и карточки знаний
-  return sum;
-}
-
-const coinsSpent = () => purchases().reduce((a, p) => a + (p.cost || 0), 0);
-const coins = () => coinsEarned() - coinsSpent();
-
-function buy(item, what, cost, label) {
-  if (coins() < cost) { toast("Не хватает монет"); return false; }
-  data.shop.purchases.push({ id: uid(), item, what, cost, label, createdAt: now(), updatedAt: now() });
-  saveData();
-  toast(`Куплено: ${label} · −${cost} 🪙`);
-  schedulePush();
-  return true;
-}
 
 function applyTheme(id) {
   const t = themeById(id);
@@ -4049,74 +4009,6 @@ function openShelfSheet(id) {
     toast("Записано на полку");
   });
   $("#shelfClose").addEventListener("click", closeSheet);
-}
-
-/* ── Экран «Магазин» ── */
-function renderShop() {
-  const bal = coins();
-  const owned = ownedThemes();
-  const cur = data.shop.theme || "dusk";
-
-  $("#view").innerHTML = `
-    <div class="panel wallet">
-      <div class="wal-sum"><b>${bal}</b><span>${T("coin")} ${T("coins")}</span></div>
-      <div class="wal-hint">Занятие — ${COIN.session}, непрерывность — до ${COIN.streakCap} сверху,
-        награда — ${COIN.ach}, карточка знаний — ${COIN.fact}</div>
-    </div>
-
-    <div class="shop-head">${T("shopThemes")}</div>
-    <div class="theme-list">
-      ${THEMES.filter(t => t.kind !== "world").map(t => {
-        const have = owned.has(t.id);
-        const on = cur === t.id;
-        return `
-          <div class="theme ${on ? "on" : ""}">
-            <span class="th-dots">${t.dots.map(c => `<i style="background:${c}"></i>`).join("")}</span>
-            <span class="th-txt"><b>${esc(t.name)}</b><em>${esc(t.sub)}</em></span>
-            ${on
-              ? `<span class="th-tag">выбрана</span>`
-              : have
-                ? `<button class="th-btn" data-use="${t.id}" type="button">Включить</button>`
-                : `<button class="th-btn buy ${bal < t.cost ? "off" : ""}" data-buy="${t.id}" type="button">${t.cost} 🪙</button>`}
-          </div>`;
-      }).join("")}
-    </div>
-
-
-    <div class="shop-head">Миры</div>
-    <div class="theme-list">
-      ${THEMES.filter(t => t.kind === "world").map(t => {
-        const have = owned.has(t.id);
-        const on = cur === t.id;
-        return `
-          <div class="theme ${on ? "on" : ""}">
-            <span class="th-dots">${t.dots.map(c => `<i style="background:${c}"></i>`).join("")}</span>
-            <span class="th-txt"><b>${esc(t.name)}</b><em>${esc(t.sub)} · свой шрифт, формы и слова</em></span>
-            ${on
-              ? `<span class="th-tag">выбрана</span>`
-              : have
-                ? `<button class="th-btn" data-use="${t.id}" type="button">Включить</button>`
-                : `<button class="th-btn buy ${bal < t.cost ? "off" : ""}" data-buy="${t.id}" type="button">${t.cost} ${T("coin")}</button>`}
-          </div>`;
-      }).join("")}
-    </div>
-
-    <div class="shop-note">${esc(T("shopNote"))}</div>`;
-
-  document.querySelectorAll("[data-use]").forEach(b =>
-    b.addEventListener("click", () => {
-      data.shop.theme = b.dataset.use; saveData(); applyTheme(data.shop.theme);
-      renderShop(); renderTabbar(); schedulePush();
-    }));
-
-  document.querySelectorAll("[data-buy]").forEach(b =>
-    b.addEventListener("click", () => {
-      const t = themeById(b.dataset.buy);
-      if (!confirm(`Купить тему «${t.name}» за ${t.cost} монет?`)) return;
-      if (!buy("theme", t.id, t.cost, t.name)) return;
-      data.shop.theme = t.id; saveData(); applyTheme(t.id);
-      renderShop(); renderTabbar();
-    }));
 }
 
 /* ══════════ Шторка ══════════ */
@@ -4570,6 +4462,7 @@ function openSettingsSheet() {
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
       ${goalUI()}
+      ${themeUI()}
       ${shakeUI()}
       ${archiveUI()}
       ${freezeUI()}
@@ -4586,6 +4479,7 @@ function openSettingsSheet() {
         <button class="btn" id="sClose" type="button">Закрыть</button>
       </div>
       ${goalUI()}
+      ${themeUI()}
       ${shakeUI()}
       ${archiveUI()}
       ${freezeUI()}
@@ -4598,6 +4492,7 @@ function openSettingsSheet() {
   if (pr) pr.addEventListener("click", () => { closeSheet(); switchProfile(); });
   bindFreezeUI();
   bindGoalUI();
+  bindThemeUI();
   bindShakeUI();
   bindArchiveUI();
   if (connected) {
@@ -4606,6 +4501,36 @@ function openSettingsSheet() {
   } else {
     $("#sConnect").addEventListener("click", () => connectGitHub($("#sToken").value.trim()));
   }
+}
+
+// оформление живёт в настройках: цвета и «миры», меняющие интерфейс целиком
+function themeUI() {
+  const cur = data.shop.theme || "dusk";
+  const row = (t) => `
+    <button class="pick ${cur === t.id ? "on" : ""}" data-theme="${t.id}" type="button">
+      <span class="pk-dots">${t.dots.map(c => `<i style="background:${c}"></i>`).join("")}</span>
+      <span class="pk-name">${esc(t.name)}</span>
+    </button>`;
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">🎨 <b>Оформление</b> — цвета и целые миры со своим шрифтом и словами</div>
+      <div class="pick-row">${THEMES.filter(t => t.kind !== "world").map(row).join("")}</div>
+      <div class="fz-head" style="margin-top:2px">Миры</div>
+      <div class="pick-row">${THEMES.filter(t => t.kind === "world").map(row).join("")}</div>
+    </div>`;
+}
+
+function bindThemeUI() {
+  document.querySelectorAll("[data-theme]").forEach(b =>
+    b.addEventListener("click", () => {
+      data.shop.theme = b.dataset.theme;
+      saveData(); schedulePush();
+      applyTheme(data.shop.theme);
+      closeSheet();
+      render();
+      toast(`Тема «${themeById(data.shop.theme).name}»`);
+    }));
 }
 
 /* ══════════ Gist ══════════ */
@@ -4738,7 +4663,7 @@ function boot() {
   load();
   normalizeActive();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
-  if (["home", "progress", "ach", "notes", "shop"].includes(cfg.tab)) tab = cfg.tab;
+  if (["home", "progress", "ach", "notes"].includes(cfg.tab)) tab = cfg.tab;
   applyTheme(data.shop.theme);
   if (["week", "month"].includes(cfg.period)) period = cfg.period;
   if (cfg.achView && cfg.achView.track) achView = cfg.achView;
