@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 78";
+const APP_VERSION = "2026.08.05 · 79";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -2448,11 +2448,36 @@ const dataStamp = () => [
   data.piano.entries, data.book.entries, data.pastel.entries,
   data.thoughts || [], data.archive || [], data.freezes || []
 ].map(list => list.length + ":" + list.reduce((m, e) => Math.max(m, e.updatedAt || 0), 0)).join("|")
-  + "|" + data.active + "|" + data.piano.activePiece + "|" + data.book.activeBook + "|" + (data.shop.theme || "");
+  + "|" + (data.shop.theme || "");
+// выбранный материал в снимок не входит: он меняется от свайпа и уже показан на экране —
+// перерисовывать из-за него главную значит сбивать листание
 
 let quietRender = false;   // перерисовка без анимаций — например, после фоновой синхронизации
 
+/* Пока человек листает ленту обложек, главную не трогаем: перерисовка пересобирает
+   ленту и возвращает её к активной обложке — со стороны это «свайп не сработал». */
+let railBusy = false;
+let railBusyTimer = null;
+let pendingRender = null;
+
+function markRailBusy() {
+  railBusy = true;
+  clearTimeout(railBusyTimer);
+  railBusyTimer = setTimeout(releaseRail, 1400);   // страховка, если события кончились молча
+}
+
+function releaseRail() {
+  clearTimeout(railBusyTimer);
+  if (!railBusy) return;
+  railBusy = false;
+  if (pendingRender) { const q = pendingRender === "quiet"; pendingRender = null; render(q); }
+}
+
 function render(quiet) {
+  if (railBusy && tab === "home" && !settingsOpen) {
+    if (pendingRender !== "loud") pendingRender = quiet ? "quiet" : "loud";
+    return;
+  }
   quietRender = !!quiet;
   try { renderInner(); } catch (e) { console.error(e); crashScreen(e); }
   quietRender = false;
@@ -2461,6 +2486,7 @@ function render(quiet) {
 function renderInner() {
   const box = $("#view");
   const keepScroll = box ? box.scrollTop : 0;
+  clearTimeout(railBusyTimer); railBusy = false; pendingRender = null;   // лента пересобирается заново
 
   renderSeg();
   renderBanner();
@@ -2737,7 +2763,7 @@ function readCoverTones(url) {
 
       coverTones.set(url, pair);
       try { localStorage.setItem("keiko-tone2-" + url, JSON.stringify(pair)); } catch {}
-      paintBackdrop(lastPainted, true);            // перекрашиваем, когда цвет посчитан
+      paintBackdrop(lastPainted);                  // перекрашиваем, когда цвет посчитан
     } catch {}
   };
   img.src = url;
@@ -2746,7 +2772,7 @@ function readCoverTones(url) {
 
 let lastPainted = null;
 
-function paintBackdrop(item, force) {
+function paintBackdrop(item) {
   const layers = document.querySelectorAll(".bgfx i");
   if (layers.length < 2 || !item) return;
   lastPainted = item;
@@ -2759,8 +2785,7 @@ function paintBackdrop(item, force) {
     `radial-gradient(760px 460px at -6% 4%, rgba(${c2}, 0.18), transparent 58%),` +
     `radial-gradient(760px 420px at 52% 110%, rgba(${c1}, 0.16), transparent 60%)`;
 
-  if (!force && layers[bgLayer].style.backgroundImage === css) return;   // тот же тон — не трогаем
-  if (force && layers[bgLayer].style.backgroundImage === css) return;
+  if (layers[bgLayer].style.backgroundImage === css) return;   // тот же тон — не трогаем
   const next = layers[bgLayer ^ 1];
   next.style.backgroundImage = css;
   next.classList.add("on");
@@ -2882,12 +2907,11 @@ function setupRail() {
     return best;
   };
 
-  // если ушли в крайнюю копию — мгновенно переносимся в среднюю, шва не видно
+  // переносимся в среднюю копию, только когда подошли к краю ленты:
+  // каждый лишний перенос сдвигает scrollLeft и сбивает доводку свайпа
   const normalize = (pos) => {
-    const lo = RAIL_MID * n, hi = lo + n;
-    let target = pos;
-    while (target < lo) target += n;
-    while (target >= hi) target -= n;
+    if (pos >= n && pos < slots.length - n) return pos;
+    const target = RAIL_MID * n + ((pos % n) + n) % n;
     if (target !== pos) {
       const delta = targetFor(target) - targetFor(pos);
       const snap = rail.style.scrollSnapType;
@@ -2899,13 +2923,15 @@ function setupRail() {
   };
 
   let spinning = false;
+  let touching = false;   // палец на ленте — доводку не начинаем
 
   const settle = () => {
-    if (spinning) return;
+    if (spinning || touching) return;
     const pos = normalize(nearestPos());
     slots.forEach((el, i) => el.classList.toggle("on", i === pos));
     paintBackdrop(items[pos % n]);
     setActiveMaterial(items[pos % n]);
+    releaseRail();
   };
 
   // ждём настоящей остановки: пока позиция меняется, ничего не трогаем
@@ -2917,7 +2943,7 @@ function setupRail() {
       const before = rail.scrollLeft;
       setTimeout(() => {
         if (spinning) return;
-        if (Math.abs(rail.scrollLeft - before) > 0.5) { settleWhenIdle(); return; }
+        if (touching || Math.abs(rail.scrollLeft - before) > 0.5) { settleWhenIdle(); return; }
         settle();
       }, 90);
     }, 110);
@@ -2964,6 +2990,7 @@ function setupRail() {
       const fixed = normalize(pos);
       slots.forEach((el, i) => el.classList.toggle("on", i === fixed));
       setActiveMaterial(items[fixed % n]);
+      releaseRail();
       done && done();
     };
 
@@ -2991,8 +3018,32 @@ function setupRail() {
   centerOn(activeRailIndex(items) + RAIL_MID * n, false);
   if (n < 2) return;
 
+  // фон догоняет обложку прямо в движении, но не чаще кадра и только при смене обложки —
+  // иначе кроссфейд перезапускается десятки раз за свайп и экран мерцает
+  let bgIdx = -1, bgTick = false, bgFallback = null;
+  const followBackdrop = () => {
+    if (bgTick) return;
+    bgTick = true;
+    const run = () => {
+      if (!bgTick) return;
+      bgTick = false;
+      clearTimeout(bgFallback);
+      const i = nearestPos() % n;
+      if (i === bgIdx) return;
+      bgIdx = i;
+      paintBackdrop(items[i]);
+    };
+    requestAnimationFrame(run);
+    bgFallback = setTimeout(run, 140);   // если кадры не идут (вкладка в фоне) — не залипаем
+  };
+
+  rail.addEventListener("touchstart", () => { touching = true; markRailBusy(); }, { passive: true });
+  ["touchend", "touchcancel"].forEach(ev =>
+    rail.addEventListener(ev, () => { touching = false; settleWhenIdle(); }, { passive: true }));
+
   rail.addEventListener("scroll", () => {
-    paintBackdrop(items[nearestPos() % n]);   // фон догоняет обложку прямо в движении
+    if (!spinning) markRailBusy();
+    followBackdrop();
     settleWhenIdle();
   }, { passive: true });
   if ("onscrollend" in rail) rail.addEventListener("scrollend", () => { if (!spinning) settle(); });
@@ -3020,16 +3071,29 @@ function setActiveMaterial(item) {
   saveData();
   schedulePush();
   updateHeroInfo();
-  renderSeg();
-  renderTabbar();
+  updateAchBadge();   // таббар целиком не перерисовываем: он бы мигал на каждом свайпе
+}
+
+// счётчик открытых наград в таббаре — меняем только цифру
+function updateAchBadge() {
+  const b = document.querySelector('#tabbar button[data-tab="ach"]');
+  if (!b) return;
+  const open = achMaterials().reduce((n, m) => n + m.open, 0);
+  const txt = [...b.childNodes].find(x => x.nodeType === 3);
+  if (txt) txt.nodeValue = `${T("tabAch")} ${open}`;
 }
 
 function updateHeroInfo() {
   const s = curStats();
   const doneToday = !!entryFor(todayStr());
 
+  // содержимое кольца меняем внутри элемента: пересоздание запускало анимацию появления заново
   const ring = $(".ring-wrap");
-  if (ring) ring.outerHTML = ringHTML(s.pct);
+  if (ring) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = ringHTML(s.pct);
+    ring.innerHTML = tmp.firstElementChild.innerHTML;
+  }
 
   const title = $(".hero-title");
   if (title) title.innerHTML = `
