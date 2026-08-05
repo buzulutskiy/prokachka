@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 79";
+const APP_VERSION = "2026.08.05 · 80";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -210,6 +210,8 @@ let online = navigator.onLine !== false;   // офлайн — не ошибка
 let editingThought = null; // мысль, которую сейчас правим
 let settingsOpen = false, settingsView = null;   // настройки — отдельный экран
 let notesFocus = false;    // ставить ли курсор в поле мысли при следующем рендере
+let notesFilter = "all";   // all | liked — что показываем в ленте мыслей
+let shuffleThought = null; // id мысли, вытянутой наугад: лента сворачивается до неё одной
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
 let tab = "home";                 // home | progress | ach | overview
@@ -2530,7 +2532,7 @@ function renderTabbar() {
     b.addEventListener("click", () => {
       tab = b.dataset.tab;
       settingsOpen = false; settingsView = null;
-      if (tab === "notes") notesFocus = true;
+      if (tab === "notes") { notesFocus = true; shuffleThought = null; notesFilter = "all"; }
       cfg.tab = tab; saveCfg();
       render();
       $("#view").scrollTop = 0;
@@ -2824,6 +2826,18 @@ function ringHTML(pct) {
     </div>`;
 }
 
+/* Подпись под названием ломается по разделителю «·», а не посреди фразы:
+   «осталось 464 страницы» уходит на новую строку целиком */
+const subLine = (...parts) => parts.filter(Boolean)
+  .map((p, i, a) => `<span class="sub-part">${p}${i < a.length - 1 ? " ·" : ""}</span>`)
+  .join(" ");
+
+function heroSub(s) {
+  if (isBook()) return subLine(esc(s.chapter.name), `осталось ${stranic(s.pages - s.page)}`);
+  if (isPastel()) return subLine(`${s.done} из ${s.lessons} уроков`, `${s.minutes} мин пройдено`);
+  return subLine(`𝄞 ${Math.round(s.pctR)}%`, `𝄢 ${Math.round(s.pctL)}%`);
+}
+
 function renderHome() {
   if (!hasMaterials()) { renderEmpty("Здесь появятся материалы", "Пока не добавлено ни одного: ни пьесы, ни книги, ни курса."); return; }
   const s = curStats();
@@ -2833,11 +2847,7 @@ function renderHome() {
   const ach = achState();
   const open = ach.filter(a => a.done).length;
 
-  const sub = isBook()
-    ? `${esc(s.chapter.name)} · осталось ${stranic(s.pages - s.page)}`
-    : isPastel()
-      ? `${s.done} из ${s.lessons} уроков · ${s.minutes} мин пройдено`
-      : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`;
+  const sub = heroSub(s);
 
   const freeze = activeFreeze();
   const nudge = freeze
@@ -3098,11 +3108,7 @@ function updateHeroInfo() {
   const title = $(".hero-title");
   if (title) title.innerHTML = `
     <h2>${isBook() ? esc(book().title) : isPastel() ? esc(course().name) : esc(piece().name)}</h2>
-    <p>${isBook()
-      ? `${esc(s.chapter.name)} · осталось ${stranic(s.pages - s.page)}`
-      : isPastel()
-        ? `${s.done} из ${s.lessons} уроков · ${s.minutes} мин пройдено`
-        : `𝄞 ${Math.round(s.pctR)}% · 𝄢 ${Math.round(s.pctL)}%`}</p>
+    <p>${heroSub(s)}</p>
     ${paceHTML()}`;
 
   const cta = $("#ctaBtn");
@@ -3256,7 +3262,10 @@ function paceHTML() {
   const days = f.sessions * 2;
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return `<span class="pace">≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")} · в таком темпе ${humanWhen(d, days)}</span>`;
+  return `<span class="pace">${subLine(
+    `≈ ${f.sessions} ${plural(f.sessions, "занятие", "занятия", "занятий")}`,
+    `в таком темпе ${humanWhen(d, days)}`
+  )}</span>`;
 }
 
 // границы текущего периода — вся неделя или весь месяц
@@ -3580,6 +3589,7 @@ function achMaterials() {
     data.active = "piano"; data.piano.activePiece = p.id;
     const list = achState(); let f = factsState();
     out.push({ track: "piano", pieceId: p.id, icon: "🎹", title: p.name, sub: p.author,
+      cover: p.cover || "", ratio: p.ratio || "",
       open: list.filter(a => a.done).length, total: list.length,
       fOpen: f.filter(x => x.open).length, fTotal: f.length });
   }
@@ -3588,6 +3598,7 @@ function achMaterials() {
     data.book.activeBook = b.id;
     const l = achState(), fx = factsState();
     out.push({ track: "book", bookId: b.id, icon: "📖", title: b.title, sub: b.author,
+      cover: b.cover || "", ratio: b.ratio || "",
       open: l.filter(a => a.done).length, total: l.length,
       fOpen: fx.filter(x => x.open).length, fTotal: fx.length });
   }
@@ -3596,6 +3607,7 @@ function achMaterials() {
   let list = course().lessons.length ? achState() : []; let f = course().lessons.length ? factsState() : [];
   if (course().lessons.length)
     out.push({ track: "pastel", icon: "🎨", title: course().name, sub: course().author,
+      cover: course().cover || "", ratio: course().ratio || "",
       open: list.filter(a => a.done).length, total: list.length,
       fOpen: f.filter(x => x.open).length, fTotal: f.length });
 
@@ -3870,7 +3882,16 @@ function renderNotes() {
   const key = (cfg.thoughtKey && mats.some(m => keyOf(m) === cfg.thoughtKey)) ? cfg.thoughtKey : currentKey();
   const cur = mats.find(m => keyOf(m) === key) || mats[0];
 
-  const list = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const all = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const liked = all.filter(t => t.liked);
+  if (notesFilter === "liked" && !liked.length) notesFilter = "all";
+  let list = notesFilter === "liked" ? liked : all;
+  // «наугад» сворачивает ленту до одной записи — можно тянуть ещё и ещё
+  if (shuffleThought) {
+    const one = list.find(t => t.id === shuffleThought);
+    if (one) list = [one]; else shuffleThought = null;
+  }
+
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
   const clock = new Intl.DateTimeFormat("ru", { hour: "2-digit", minute: "2-digit" });
   const nowYear = new Date().getFullYear();
@@ -3880,11 +3901,24 @@ function renderNotes() {
     return fmt.format(d) + year + (t.createdAt ? ", " + clock.format(new Date(t.createdAt)) : "");
   };
   const arch = (data.archive || []).filter(a => !a.deleted);
-  const titleOf = (t) => {
+  // у мысли своя обложка — по ней видно, откуда она, ещё до чтения текста
+  const sourceOf = (t) => {
     const m = mats.find(x => keyOf(x) === t.key);
-    if (m) return `${m.icon} ${m.title}`;
+    if (m) return { icon: m.icon, title: m.title, cover: m.cover, ratio: m.ratio };
     const a = arch.find(x => x.id === t.key);
-    return a ? `${a.icon || "📖"} ${a.title}` : "📎 архив";
+    return a
+      ? { icon: a.icon || "📖", title: a.title, cover: a.cover || "", ratio: a.ratio || "" }
+      : { icon: "📎", title: "Архив", cover: "", ratio: "" };
+  };
+  const sourceHTML = (t) => {
+    const s = sourceOf(t);
+    return `
+      <span class="th-cover" style="aspect-ratio:${esc(s.ratio || "3 / 4.4")}">
+        ${s.cover
+          ? `<img src="${esc(s.cover)}" alt="" loading="lazy" decoding="async">`
+          : `<i>${s.icon}</i>`}
+      </span>
+      <span class="th-name">${esc(s.title)}</span>`;
   };
 
   $("#view").innerHTML = `
@@ -3902,10 +3936,20 @@ function renderNotes() {
       </div>
     </div>
 
+    ${all.length ? `
+      <div class="th-tools">
+        <div class="th-tabs">
+          <button class="th-tab ${notesFilter === "all" ? "on" : ""}" data-filter="all" type="button">Все ${all.length}</button>
+          <button class="th-tab ${notesFilter === "liked" ? "on" : ""}" data-filter="liked" type="button">♥ ${liked.length}</button>
+        </div>
+        <button class="th-tab dice" id="thDice" type="button">${shuffleThought ? "🎲 Ещё" : "🎲 Наугад"}</button>
+      </div>
+      ${shuffleThought ? `<button class="th-showall" id="thAll" type="button">Показать всю ленту</button>` : ""}` : ""}
+
     ${list.length ? `<div class="feed">
       ${list.map(t => t.id === editingThought ? `
         <article class="post thought editing">
-          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}</div>
+          <div class="th-head">${sourceHTML(t)}<span class="th-when">${esc(when(t))}</span></div>
           <textarea class="note-input th-text" id="thEdit" rows="4">${esc(t.text)}</textarea>
           <div class="th-edit-row">
             <button class="btn gold" data-save="${t.id}" type="button">Сохранить</button>
@@ -3913,9 +3957,15 @@ function renderNotes() {
           </div>
         </article>` : `
         <article class="post thought">
-          <div class="th-meta">${esc(titleOf(t))} · ${esc(when(t))}${t.editedAt ? " · изменено" : ""}
-            <button class="th-act" data-edit="${t.id}" type="button">✎</button>
-            <button class="th-act" data-th="${t.id}" type="button">✕</button>
+          <div class="th-head">
+            ${sourceHTML(t)}
+            <span class="th-when">${esc(when(t))}${t.editedAt ? " · изменено" : ""}</span>
+            <span class="th-acts">
+              <button class="th-act like ${t.liked ? "on" : ""}" data-like="${t.id}" type="button"
+                aria-label="${t.liked ? "Убрать из любимых" : "В любимые"}">${t.liked ? "♥" : "♡"}</button>
+              <button class="th-act" data-edit="${t.id}" type="button" aria-label="Изменить">✎</button>
+              <button class="th-act" data-th="${t.id}" type="button" aria-label="Удалить">✕</button>
+            </span>
           </div>
           <p class="post-text">${esc(t.text)}</p>
         </article>`).join("")}
@@ -3949,9 +3999,47 @@ function renderNotes() {
     });
     cfg.thoughtKey = key; saveCfg();
     saveData(); schedulePush();
+    shuffleThought = null;              // новая мысль — возвращаемся к ленте
     renderNotes();
     toast("Записано");
   });
+
+  document.querySelectorAll("[data-filter]").forEach(b =>
+    b.addEventListener("click", () => {
+      notesFilter = b.dataset.filter;
+      shuffleThought = null;
+      renderNotes();
+      $("#view").scrollTop = 0;
+    }));
+
+  const dice = $("#thDice");
+  if (dice) dice.addEventListener("click", () => {
+    const pool = (notesFilter === "liked" ? all.filter(t => t.liked) : all)
+      .filter(t => t.id !== shuffleThought);          // ту же мысль дважды подряд не тянем
+    if (!pool.length) { toast(all.length > 1 ? "Это всё, что есть" : "Мысль пока одна"); return; }
+    shuffleThought = pool[Math.floor(Math.random() * pool.length)].id;
+    editingThought = null;
+    renderNotes();
+    $("#view").scrollTop = 0;
+  });
+
+  const showAll = $("#thAll");
+  if (showAll) showAll.addEventListener("click", () => { shuffleThought = null; renderNotes(); });
+
+  document.querySelectorAll("[data-like]").forEach(b =>
+    b.addEventListener("click", () => {
+      const t = (data.thoughts || []).find(x => x.id === b.dataset.like);
+      if (!t) return;
+      t.liked = !t.liked;
+      t.updatedAt = now();
+      saveData(); schedulePush();
+      // в общей ленте меняем только сердечко — иначе лента дёрнется и уедет к началу
+      if (notesFilter === "liked") { renderNotes(); return; }
+      b.classList.toggle("on", !!t.liked);
+      b.textContent = t.liked ? "♥" : "♡";
+      const chip = document.querySelector('[data-filter="liked"]');
+      if (chip) chip.textContent = "♥ " + thoughts().filter(x => x.liked).length;
+    }));
 
   document.querySelectorAll("[data-edit]").forEach(b =>
     b.addEventListener("click", () => { editingThought = b.dataset.edit; renderNotes(); }));
