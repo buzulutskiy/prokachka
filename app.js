@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 59";
+const APP_VERSION = "2026.08.03 · 60";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -199,6 +199,7 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
+let notesFocus = false;    // ставить ли курсор в поле мысли при следующем рендере
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
 let tab = "home";                 // home | progress | ach | overview
@@ -2432,8 +2433,8 @@ function renderTabbar() {
   $("#tabbar").innerHTML = [
     [ "home", ICON("home", "◉"), T("tabHome")],
     ["progress", ICON("progress", "▤"), T("tabProgress")],
-    ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`],
     ["notes", ICON("notes", "✎"), T("tabNotes")],
+    ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`],
     ["shop", ICON("shop", "◍"), `${coins()} ${T("coin")}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
@@ -2442,6 +2443,7 @@ function renderTabbar() {
   document.querySelectorAll("#tabbar button").forEach(b =>
     b.addEventListener("click", () => {
       tab = b.dataset.tab;
+      if (tab === "notes") notesFocus = true;
       cfg.tab = tab; saveCfg();
       render();
       $("#view").scrollTop = 0;
@@ -3679,31 +3681,32 @@ function renderNotes() {
 
   $("#view").innerHTML = `
     <div class="panel th-panel">
+      <textarea class="note-input th-text" id="thText" rows="3" placeholder="Что подумалось?"></textarea>
       <div class="th-row">
         <select class="note-input th-pick" id="thMat">
           ${mats.map(m => `<option value="${esc(keyOf(m))}" ${keyOf(m) === key ? "selected" : ""}>${m.icon} ${esc(m.title)}</option>`).join("")}
         </select>
-        <span class="th-at">${unitName}
-          <input class="note-input" id="thAt" type="number" inputmode="numeric" min="0" max="9999" value="${where.at}">
-        </span>
+        <button class="btn gold th-send" id="thSave" type="button">Записать</button>
       </div>
-      <textarea class="note-input th-text" id="thText" rows="3" placeholder="Что подумалось? Пара строк для себя"></textarea>
-      <button class="btn gold" id="thSave" type="button">Записать</button>
     </div>
 
     ${list.length ? `<div class="feed">
       ${list.map(t => `
         <article class="post thought">
-          <div class="th-meta">${esc(titleOf(t))} · ${esc(whereLabel(t))} · ${esc(fmt.format(fromStr(t.date)))}
+          <div class="th-meta">${esc(titleOf(t))} · ${esc(fmt.format(fromStr(t.date)))}
             <button class="th-del" data-th="${t.id}" type="button">✕</button>
           </div>
           <p class="post-text">${esc(t.text)}</p>
         </article>`).join("")}
     </div>` : `<div class="empty-note">Здесь будут мысли, которые приходят по ходу.<br>Первую можно записать прямо сейчас.</div>`}`;
 
+  const area = $("#thText");
+  if (notesFocus) { notesFocus = false; setTimeout(() => area.focus(), 60); }
+
   $("#thMat").addEventListener("change", (e) => {
     cfg.thoughtKey = e.target.value; saveCfg();
-    const text = $("#thText").value;
+    const text = area.value;
+    notesFocus = true;
     renderNotes();
     $("#thText").value = text;                  // не теряем начатую мысль при смене материала
   });
@@ -3713,7 +3716,7 @@ function renderNotes() {
     if (!text) { toast("Напиши пару слов"); return; }
     data.thoughts.push({
       id: uid(), key, track: cur.track,
-      unit: where.unit, at: Math.max(0, Math.round(Number($("#thAt").value) || 0)),
+      unit: where.unit, at: where.at,
       text: text.slice(0, 2000), date: todayStr(),
       createdAt: now(), updatedAt: now()
     });
