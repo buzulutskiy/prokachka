@@ -1440,26 +1440,27 @@
       grid-template-columns: auto 1fr auto;
       grid-template-areas: "cover name acts" "cover when acts";
       align-items: center;
-      column-gap: 10px; row-gap: 2px;
+      column-gap: 9px; row-gap: 0;
     }
+    /* обложка обрезана до квадрата — так строка остаётся компактной */
     .th-cover {
       grid-area: cover;
-      height: 58px; width: auto;
+      width: 34px; height: 34px;
       display: flex; align-items: center; justify-content: center;
-      border-radius: 4px;
+      border-radius: 7px;
       overflow: hidden;
       background: var(--glass);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 1px 0 0 rgba(255, 255, 255, 0.14);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     }
     .th-cover img { height: 100%; width: 100%; object-fit: cover; display: block; }
     .th-cover i { font-style: normal; font-size: 1rem; }
     .th-name {
-      grid-area: name;
+      grid-area: name; align-self: end;
       min-width: 0;
-      font-size: 0.92rem; font-weight: 750; color: var(--ink);
+      font-size: 0.88rem; font-weight: 750; line-height: 1.25; color: var(--ink);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .th-when { grid-area: when; font-size: 0.72rem; color: var(--dim); }
+    .th-when { grid-area: when; align-self: start; font-size: 0.7rem; line-height: 1.25; color: var(--dim); }
     .th-acts { grid-area: acts; display: flex; align-items: center; gap: 2px; }
     .post.thought.editing .th-head { grid-template-areas: "cover name" "cover when"; grid-template-columns: auto 1fr; }
 
@@ -1467,23 +1468,20 @@
     .th-act:active { color: var(--ink); }
     .th-act.like.on { color: #ff5f7e; }
 
-    /* фильтры ленты и «наугад» */
-    .th-tools { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; }
-    .th-tabs { display: flex; gap: 6px; flex: 1; min-width: 0; }
-    .th-tab {
-      min-height: 34px; padding: 0 12px;
-      border-radius: 17px;
-      background: var(--glass); border: 1px solid var(--glass-line);
-      color: var(--muted); font-size: 0.78rem; font-weight: 650;
-      white-space: nowrap;
+    /* строка над лентой: что сейчас показано и как вытянуть случайную мысль */
+    .th-hint {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      flex-wrap: wrap;
+      margin: 12px 0 2px;
+      font-size: 0.76rem; color: var(--dim); text-align: center;
     }
-    .th-tab.on { background: var(--gold); border-color: transparent; color: #1a1408; }
-    .th-tab.dice { color: var(--ink); }
-    .th-showall {
-      width: 100%; min-height: 38px; margin-top: 8px;
-      border-radius: 13px;
-      background: none; border: 1px dashed var(--glass-line);
-      color: var(--muted); font-size: 0.8rem; font-weight: 650;
+    /* внизу ленты остаётся место под плавающие кнопки */
+    .notes-feed { padding-bottom: 52px; }
+    .th-link {
+      padding: 4px 10px; min-height: 30px;
+      border-radius: 15px;
+      background: var(--glass); border: 1px solid var(--glass-line);
+      color: var(--ink); font-size: 0.76rem; font-weight: 650;
     }
     .post.thought.editing { border-color: rgba(255, 201, 77, 0.4); }
     .th-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1584,6 +1582,30 @@
     .to-top.show { opacity: 1; transform: none; pointer-events: auto; }
     .to-top:active { transform: scale(0.92); }
     body.picking .to-top { display: none; }
+
+    /* счётчик любимых мыслей — в углу, симметрично кнопке «наверх» */
+    .like-fab {
+      position: fixed; left: 16px; z-index: 5;
+      bottom: calc(var(--tab-h, 72px) + 14px);
+      min-width: 44px; height: 44px; padding: 0 13px;
+      border-radius: 22px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.86rem; font-weight: 700; color: var(--ink);
+      background: var(--glass-2);
+      backdrop-filter: blur(18px) saturate(1.4);
+      -webkit-backdrop-filter: blur(18px) saturate(1.4);
+      border: 1px solid var(--glass-line);
+      box-shadow: inset 0 1px 0 var(--glass-hi), 0 8px 22px var(--shadow);
+      opacity: 0; transform: translateY(10px) scale(0.9);
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .like-fab.show { opacity: 1; transform: none; pointer-events: auto; }
+    .like-fab:active { transform: scale(0.94); }
+    .like-fab i { font-style: normal; font-size: 1.02rem; color: #ff5f7e; line-height: 1; }
+    .like-fab.on { background: #ff5f7e; border-color: transparent; color: #2a0d13; }
+    .like-fab.on i { color: #2a0d13; }
+    body.picking .like-fab { display: none; }
 
     /* ── Праздник ────────────────────── */
     .cheer {
@@ -1829,6 +1851,7 @@
   </div>
 
   <button class="to-top" id="toTop" type="button" aria-label="Наверх">↑</button>
+  <button class="like-fab" id="likeFab" type="button" aria-label="Только любимые"><i>♡</i><b>0</b></button>
 
   <div class="toast" id="toast"></div>
 

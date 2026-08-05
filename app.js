@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 80";
+const APP_VERSION = "2026.08.05 · 81";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -2500,6 +2500,7 @@ function renderInner() {
   else if (tab === "progress") renderProgress();
   else if (tab === "notes") renderNotes();
   else renderAch();
+  syncLikeFab();
 
   if (quietRender && box && keepScroll) box.scrollTop = keepScroll;   // не сбрасываем место, где человек читал
 }
@@ -3875,6 +3876,32 @@ function keyOf(m) {
 }
 const currentKey = () => isBook() ? book().id : isPastel() ? "pastel" : (piece() ? piece().id : "");
 
+/* Случайную мысль вытягивает встряхивание — как выбор материала на главной.
+   Строка над лентой объясняет это, а если движение недоступно, даёт обычную кнопку. */
+function thoughtHintHTML() {
+  if (shuffleThought)
+    return `<span>🎲 Одна наугад</span><button class="th-link" id="thAll" type="button">вся лента</button>`;
+  if (notesFilter === "liked")
+    return `<span>♥ Только любимые</span><button class="th-link" id="thAll" type="button">вся лента</button>`;
+  if (shakeReady) return `<span>🎲 Встряхни телефон — покажу случайную мысль</span>`;
+  if (typeof window.DeviceMotionEvent === "function")
+    return `<button class="th-link" id="thShakeOn" type="button">🎲 Включить выбор встряхиванием</button>`;
+  return `<button class="th-link" id="thDice" type="button">🎲 Показать случайную мысль</button>`;
+}
+
+// вытянуть случайную мысль: ту же дважды подряд не показываем
+function shuffleRandomThought() {
+  const pool = thoughts()
+    .filter(t => notesFilter !== "liked" || t.liked)
+    .filter(t => t.id !== shuffleThought);
+  if (!pool.length) { toast("Мыслей пока мало"); return false; }
+  shuffleThought = pool[Math.floor(Math.random() * pool.length)].id;
+  editingThought = null;
+  renderNotes();
+  $("#view").scrollTop = 0;
+  return true;
+}
+
 function renderNotes() {
   if (!hasMaterials()) { renderEmpty("Мыслей пока нет", "Они появятся вместе с первым материалом."); return; }
 
@@ -3913,7 +3940,7 @@ function renderNotes() {
   const sourceHTML = (t) => {
     const s = sourceOf(t);
     return `
-      <span class="th-cover" style="aspect-ratio:${esc(s.ratio || "3 / 4.4")}">
+      <span class="th-cover">
         ${s.cover
           ? `<img src="${esc(s.cover)}" alt="" loading="lazy" decoding="async">`
           : `<i>${s.icon}</i>`}
@@ -3936,17 +3963,9 @@ function renderNotes() {
       </div>
     </div>
 
-    ${all.length ? `
-      <div class="th-tools">
-        <div class="th-tabs">
-          <button class="th-tab ${notesFilter === "all" ? "on" : ""}" data-filter="all" type="button">Все ${all.length}</button>
-          <button class="th-tab ${notesFilter === "liked" ? "on" : ""}" data-filter="liked" type="button">♥ ${liked.length}</button>
-        </div>
-        <button class="th-tab dice" id="thDice" type="button">${shuffleThought ? "🎲 Ещё" : "🎲 Наугад"}</button>
-      </div>
-      ${shuffleThought ? `<button class="th-showall" id="thAll" type="button">Показать всю ленту</button>` : ""}` : ""}
+    ${all.length ? `<div class="th-hint">${thoughtHintHTML()}</div>` : ""}
 
-    ${list.length ? `<div class="feed">
+    ${list.length ? `<div class="feed notes-feed">
       ${list.map(t => t.id === editingThought ? `
         <article class="post thought editing">
           <div class="th-head">${sourceHTML(t)}<span class="th-when">${esc(when(t))}</span></div>
@@ -4004,27 +4023,21 @@ function renderNotes() {
     toast("Записано");
   });
 
-  document.querySelectorAll("[data-filter]").forEach(b =>
-    b.addEventListener("click", () => {
-      notesFilter = b.dataset.filter;
-      shuffleThought = null;
-      renderNotes();
-      $("#view").scrollTop = 0;
-    }));
-
   const dice = $("#thDice");
-  if (dice) dice.addEventListener("click", () => {
-    const pool = (notesFilter === "liked" ? all.filter(t => t.liked) : all)
-      .filter(t => t.id !== shuffleThought);          // ту же мысль дважды подряд не тянем
-    if (!pool.length) { toast(all.length > 1 ? "Это всё, что есть" : "Мысль пока одна"); return; }
-    shuffleThought = pool[Math.floor(Math.random() * pool.length)].id;
-    editingThought = null;
+  if (dice) dice.addEventListener("click", shuffleRandomThought);
+
+  const shakeOn = $("#thShakeOn");
+  if (shakeOn) shakeOn.addEventListener("click", async () => {
+    const ok = await enableShake(true);
+    toast(ok ? "Готово — потряси телефон" : "Доступ к движению не разрешён");
     renderNotes();
-    $("#view").scrollTop = 0;
   });
 
   const showAll = $("#thAll");
-  if (showAll) showAll.addEventListener("click", () => { shuffleThought = null; renderNotes(); });
+  if (showAll) showAll.addEventListener("click", () => {
+    shuffleThought = null; notesFilter = "all";
+    renderNotes();
+  });
 
   document.querySelectorAll("[data-like]").forEach(b =>
     b.addEventListener("click", () => {
@@ -4037,8 +4050,7 @@ function renderNotes() {
       if (notesFilter === "liked") { renderNotes(); return; }
       b.classList.toggle("on", !!t.liked);
       b.textContent = t.liked ? "♥" : "♡";
-      const chip = document.querySelector('[data-filter="liked"]');
-      if (chip) chip.textContent = "♥ " + thoughts().filter(x => x.liked).length;
+      syncLikeFab();
     }));
 
   document.querySelectorAll("[data-edit]").forEach(b =>
@@ -4068,6 +4080,19 @@ function renderNotes() {
       t.deleted = true; t.updatedAt = now();
       saveData(); schedulePush(); renderNotes();
     }));
+
+  syncLikeFab();
+}
+
+// счётчик любимых мыслей в углу: он же переключает показ только любимых
+function syncLikeFab() {
+  const b = $("#likeFab");
+  if (!b) return;
+  const on = tab === "notes" && !settingsOpen && data && data.thoughts;
+  const n = on ? thoughts().filter(t => t.liked).length : 0;
+  b.classList.toggle("show", n > 0);
+  b.classList.toggle("on", notesFilter === "liked");
+  b.innerHTML = `<i>${notesFilter === "liked" ? "♥" : "♡"}</i><b>${n}</b>`;
 }
 
 // материал в том виде, в каком его понимает withMaterial
@@ -4700,6 +4725,8 @@ function handleShake(e) {
     if ($("#sheet")?.classList.contains("show")) return;
     if ($("#cheer")?.classList.contains("show")) return;
     if (navigator.vibrate) navigator.vibrate(25);
+    // в мыслях встряхивание вытягивает случайную запись, а не материал
+    if (tab === "notes" && !settingsOpen) { shuffleRandomThought(); return; }
     rollDice();
   }
 }
@@ -5312,6 +5339,15 @@ function boot() {
       setTimeout(() => { if (view.scrollTop > 0) view.scrollTop = 0; }, 600);
     });
   }
+
+  const fab = $("#likeFab");
+  if (fab) fab.addEventListener("click", () => {
+    notesFilter = notesFilter === "liked" ? "all" : "liked";
+    shuffleThought = null;
+    renderNotes();
+    syncLikeFab();
+    if (view) view.scrollTop = 0;
+  });
 
   window.addEventListener("online", () => {
     online = true; setSyncDot(""); renderBanner();
