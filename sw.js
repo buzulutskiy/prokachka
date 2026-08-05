@@ -1,4 +1,4 @@
-const CACHE = "prokachka-v62";
+const CACHE = "prokachka-v63";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -31,6 +31,9 @@ self.addEventListener("fetch", (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy));
         return r;
       })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
+      .catch(() =>
+      // без сети ищем в кэше, не глядя на ?v=… — иначе app.js?v=62 не находится
+      caches.match(e.request, { ignoreSearch: true })
+        .then((r) => r || (e.request.mode === "navigate" ? caches.match("./index.html") : undefined)))
   );
 });

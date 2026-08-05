@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 62";
+const APP_VERSION = "2026.08.03 · 63";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2350,6 +2350,14 @@ function renderBanner() {
   const box = $("#banner");
   if (!box) return;
 
+  if (!online && gistReady()) {
+    box.innerHTML = `
+      <div class="warn off">
+        <span>📴 <b>Нет сети.</b> Записи сохраняются на устройстве и уйдут в гист, как только связь появится.</span>
+      </div>`;
+    return;
+  }
+
   if (newVersion) {
     box.innerHTML = `
       <div class="warn upd">
@@ -3330,10 +3338,7 @@ function renderDayBox() {
             <button class="del" data-del="${x.entry.id}" data-track="${x.track}" type="button">✕</button>
           </div>`).join("")}</div>`
       : `<div class="empty">В этот день ничего не отмечено</div>`}
-    <div class="day-add">
-      ${[["piano", "🎹"], ["book", "📖"], ["pastel", "🎨"]].map(([t, ic]) =>
-        `<button class="da" data-add="${t}" type="button">${ic} отметить</button>`).join("")}
-    </div>`;
+`;
 
   document.querySelectorAll("[data-del]").forEach(b =>
     b.addEventListener("click", () => {
@@ -3345,15 +3350,6 @@ function renderDayBox() {
       toast("Запись удалена");
     }));
 
-  document.querySelectorAll("[data-add]").forEach(b =>
-    b.addEventListener("click", () => {
-      if (data.active !== b.dataset.add) {
-        data.active = b.dataset.add;
-        pending = []; pickLessons = [];
-        saveData(); syncPickers();
-      }
-      openLogSheet();
-    }));
 }
 
 // все материалы с их наградами — для входного списка
@@ -4673,6 +4669,7 @@ async function syncNow(manual) {
     syncPickers(); render();
     if (manual) toast("Синхронизировано");
   } catch (e) {
+    if (!navigator.onLine) { online = false; setSyncDot("off"); renderBanner(); return; }
     setSyncDot("err");
     syncError = e.message || "нет связи с GitHub";
     renderBanner();
@@ -4708,6 +4705,20 @@ function boot() {
   const t = new Date();
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();
+
+  // без него приложение не открывается офлайн: sw.js кэширует оболочку
+  if ("serviceWorker" in navigator) {
+    setTimeout(() => {
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+    }, 1200);
+  }
+
+  window.addEventListener("online", () => {
+    online = true; setSyncDot(""); renderBanner();
+    if (gistReady()) syncNow(false);        // догоняем всё, что накопилось офлайн
+  });
+  window.addEventListener("offline", () => { online = false; setSyncDot("off"); renderBanner(); });
+  if (!online) setSyncDot("off");
 
   $("#gearBtn").addEventListener("click", openSettingsSheet);
   document.querySelector(".logo").addEventListener("click", openAboutSheet);
