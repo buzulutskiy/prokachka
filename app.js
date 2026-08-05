@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 84";
+const APP_VERSION = "2026.08.05 · 85";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -1023,8 +1023,42 @@ const WORDS_UNIZH = {
 
 const BOOK_ACH = { "snow-1": ACH_BOOK, odyssey: ACH_ODYSSEY, tesson: ACH_TESSON, screwtape: ACH_SCREWTAPE, unizhennye: ACH_UNIZH };
 const BOOK_WORDS = { "snow-1": WORDS_BOOK, odyssey: WORDS_ODYSSEY, tesson: WORDS_TESSON, screwtape: WORDS_SCREWTAPE, unizhennye: WORDS_UNIZH };
-const achList = () => isBook() ? (BOOK_ACH[book().id] || ACH_BOOK) : isPastel() ? ACH_PASTEL : ACH_PIANO;
-const achWords = () => isBook() ? (BOOK_WORDS[book().id] || WORDS_BOOK) : isPastel() ? WORDS_PASTEL : WORDS_PIANO;
+
+/* ══════════ Каталог материалов ══════════
+   Награды, карточки знаний и обложки могут лежать не в коде, а в гисте.
+   Что есть в каталоге — берётся оттуда, остальное из зашитого. */
+
+const LS_CAT = "keiko-catalog-v1";
+const LS_COVER = (id) => "keiko-cover-" + id;
+let CATALOG = {};
+try { CATALOG = JSON.parse(localStorage.getItem(LS_CAT) || "{}") || {}; } catch {}
+
+const OPS = {
+  ">=": (a, b) => a >= b, ">": (a, b) => a > b,
+  "<=": (a, b) => a <= b, "<": (a, b) => a < b, "==": (a, b) => a === b
+};
+// условие награды в каталоге — данные, а не код: [["page", ">=", 45], ["days", ">=", 20]]
+const testFromWhen = (when) => (s) => (when || []).every(([m, op, v]) => {
+  if (op === "is") return !!s[m] === (v !== false);
+  if (op === "has") return !!(s[m] && s[m].has && s[m].has(v));
+  return OPS[op] ? OPS[op](Number(s[m]) || 0, Number(v)) : false;
+});
+
+const curKey = () => isBook() ? book().id : isPastel() ? "pastel" : (piece() ? piece().id : "");
+const catOf = (id) => CATALOG[id] || null;
+
+const achCache = new Map();
+function achFromCatalog(id) {
+  const c = catOf(id);
+  if (!c || !Array.isArray(c.ach)) return null;
+  if (!achCache.has(id)) achCache.set(id, c.ach.map(a => ({ ...a, test: testFromWhen(a.when) })));
+  return achCache.get(id);
+}
+
+const achList = () => achFromCatalog(curKey()) ||
+  (isBook() ? (BOOK_ACH[book().id] || ACH_BOOK) : isPastel() ? ACH_PASTEL : ACH_PIANO);
+const achWords = () => (catOf(curKey()) || {}).words ||
+  (isBook() ? (BOOK_WORDS[book().id] || WORDS_BOOK) : isPastel() ? WORDS_PASTEL : WORDS_PIANO);
 const flavor = () => (!isBook() && !isPastel() && PIECE_FLAVOR[piece().id]) || {};
 const lastName = (author) => String(author || "").trim().split(/\s+/).pop();
 
@@ -1935,7 +1969,7 @@ const FACTS = {
    Когда материал пройден до конца — открывается всё, что осталось. */
 function factsState() {
   const key = isBook() ? book().id : isPastel() ? "pastel" : piece().id;
-  const list = FACTS[key] || [];
+  const list = (catOf(key) || {}).facts || FACTS[key] || [];
   if (!list.length) return [];
   // у курса шагом служат пройденные уроки: их мало, поэтому за раз открывается несколько карточек
   const step = isPastel() ? doneLessons().size : new Set(entries().map(e => e.date)).size;
@@ -2623,13 +2657,30 @@ function activeRailIndex(items) {
   return Math.max(0, i);
 }
 
+/* Картинка обложки: из каталога, если она там есть, иначе файл рядом с приложением.
+   Каталожную держим в localStorage — иначе при каждом запуске её пришлось бы качать. */
+const coverCache = new Map();
+function coverSrc(id, fallback) {
+  if (!id) return fallback || "";
+  const c = catOf(id);
+  if (!c || !c.cover) return fallback || "";
+  if (coverCache.has(id)) return coverCache.get(id) || fallback || "";
+  let saved = null;
+  try { saved = localStorage.getItem(LS_COVER(id)); } catch {}
+  if (saved) { coverCache.set(id, saved); return saved; }
+  coverCache.set(id, "");
+  pullCover(id);                       // подтянем и перерисуем, пока показываем запасной файл
+  return fallback || "";
+}
+
 // обложка любого материала — не зависит от активного трека
 function coverOf(item) {
   if (item.track === "book") {
     const b = item.book || book();
-    if (b.cover) return `
+    const src = coverSrc(b.id, b.cover);
+    if (src) return `
       <div class="cover photo" style="aspect-ratio:${esc(b.ratio || "3 / 4.4")}">
-        <img src="${esc(b.cover)}" alt="${esc(b.title)}" width="465" height="720" decoding="async" fetchpriority="high">
+        <img src="${esc(src)}" alt="${esc(b.title)}" width="465" height="720" decoding="async" fetchpriority="high">
       </div>`;
     return `
       <div class="cover book ${esc(b.tone || "sea")}">
@@ -2654,9 +2705,10 @@ function coverOf(item) {
       </div>`;
   }
   const p = item.piece;
-  if (p.cover) return `
+  const psrc = coverSrc(p.id, p.cover);
+  if (psrc) return `
     <div class="cover photo" style="aspect-ratio:${esc(p.ratio || "3 / 4.4")}">
-      <img src="${esc(p.cover)}" alt="${esc(p.name)}" width="509" height="720" decoding="async" fetchpriority="high">
+      <img src="${esc(psrc)}" alt="${esc(p.name)}" width="509" height="720" decoding="async" fetchpriority="high">
     </div>`;
   return `
     <div class="cover piano ${esc(p.tone || "violet")}">
@@ -5045,6 +5097,219 @@ function restoreBackup(file) {
   reader.readAsText(file);
 }
 
+/* ══════════ Каталог: обмен с гистом ══════════
+   Отдельный гист, чтобы не тащить его при каждой синхронизации данных.
+   Тексты — одним файлом, обложки — по файлу на материал, чтобы ни один не разросся. */
+
+const CAT_FILE = "catalog.json";
+const CAT_COVER_FILE = (id) => `cover-${id}.txt`;
+const CAT_EVERY = 24 * 3600e3;
+
+async function ensureCatalogGist(create) {
+  if (cfg.catalogId) return cfg.catalogId;
+  const r = await gh("/gists?per_page=100");
+  if (!r.ok) throw new Error("список гистов недоступен");
+  const found = (await r.json()).find(g => g.files && g.files[CAT_FILE]);
+  if (found) { cfg.catalogId = found.id; saveCfg(); return found.id; }
+  if (!create) return "";
+
+  const cr = await gh("/gists", {
+    method: "POST",
+    body: JSON.stringify({
+      description: "Кэйко — каталог материалов (награды, карточки, обложки)",
+      public: false,
+      files: { [CAT_FILE]: { content: JSON.stringify({ v: 1, savedAt: now(), materials: {} }) } }
+    })
+  });
+  if (!cr.ok) throw new Error("каталог не создался");
+  cfg.catalogId = (await cr.json()).id; saveCfg();
+  return cfg.catalogId;
+}
+
+function applyCatalog(pack) {
+  if (!pack || !pack.materials) return 0;
+  CATALOG = pack.materials;
+  achCache.clear(); coverCache.clear();
+  try { localStorage.setItem(LS_CAT, JSON.stringify(CATALOG)); } catch {}
+  cfg.catalogAt = now(); saveCfg();
+  return Object.keys(CATALOG).length;
+}
+
+async function catalogPull(force) {
+  if (!cfg.token) return;
+  if (!force && now() - (cfg.catalogAt || 0) < CAT_EVERY) return;
+  const id = await ensureCatalogGist(false);
+  if (!id) return;
+  const r = await gh("/gists/" + id);
+  if (!r.ok) throw new Error("каталог недоступен");
+  const f = (await r.json()).files[CAT_FILE];
+  if (!f) return;
+  let txt = f.content;
+  if (f.truncated && f.raw_url) txt = await (await withTimeout(fetch(f.raw_url), 20000)).text();
+  return applyCatalog(JSON.parse(txt));
+}
+
+// обложки качаем по одной и только когда материал реально показан
+const coverPulling = new Set();
+async function pullCover(id) {
+  if (!cfg.token || !cfg.catalogId || coverPulling.has(id)) return;
+  coverPulling.add(id);
+  try {
+    const r = await gh("/gists/" + cfg.catalogId);
+    if (!r.ok) return;
+    const f = (await r.json()).files[CAT_COVER_FILE(id)];
+    if (!f) return;
+    let txt = f.content;
+    if (f.truncated && f.raw_url) txt = await (await withTimeout(fetch(f.raw_url), 25000)).text();
+    txt = txt.trim();
+    if (!txt.startsWith("data:")) return;
+    try { localStorage.setItem(LS_COVER(id), txt); } catch {}
+    coverCache.set(id, txt);
+    render();
+  } catch {} finally { coverPulling.delete(id); }
+}
+
+/* Разовый перенос: собираем то, что зашито в коде, и кладём в гист.
+   Условия наград превращаем в данные — разбираем исходник простых проверок. */
+function whenOf(fn) {
+  const body = String(fn).replace(/^[^=]*=>/, "");
+  const out = [];
+  for (const part of body.split("&&")) {
+    let m = part.match(/s\.(\w+)\s*(>=|<=|===|==|>|<)\s*([\d.]+)/);
+    if (m) { out.push([m[1], m[2] === "===" || m[2] === "==" ? "==" : m[2], Number(m[3])]); continue; }
+    m = part.match(/s\.(\w+)\.has\(\s*([\d.]+)\s*\)/);
+    if (m) { out.push([m[1], "has", Number(m[2])]); continue; }
+    m = part.match(/^\s*!?\s*s\.(\w+)\s*$/);
+    if (m) { out.push([m[1], "is", !/!\s*s\./.test(part)]); continue; }
+    return null;                        // условие сложнее — материал не переносим молча
+  }
+  return out.length ? out : null;
+}
+
+function packMaterial(id) {
+  const ach = (BOOK_ACH[id] || (id === "pastel" ? ACH_PASTEL : null) ||
+    (data.piano.pieces.some(p => p.id === id) ? ACH_PIANO : ACH_BOOK));
+  const words = BOOK_WORDS[id] || (id === "pastel" ? WORDS_PASTEL : null) ||
+    (data.piano.pieces.some(p => p.id === id) ? WORDS_PIANO : WORDS_BOOK);
+
+  const list = [];
+  for (const a of ach) {
+    const when = whenOf(a.test);
+    if (!when) return { error: `не разобрал условие награды «${a.name}»` };
+    list.push({ id: a.id, icon: a.icon, name: a.name, hint: a.hint, secret: !!a.secret, when });
+  }
+  return { ach: list, words, facts: FACTS[id] || [] };
+}
+
+async function fileToDataUri(url) {
+  const r = await withTimeout(fetch(url), 20000);
+  if (!r.ok) throw new Error("обложка не читается: " + url);
+  const blob = await r.blob();
+  return await new Promise((ok, bad) => {
+    const fr = new FileReader();
+    fr.onload = () => ok(String(fr.result));
+    fr.onerror = () => bad(new Error("обложка не прочиталась"));
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function catalogPush(ids) {
+  const id = await ensureCatalogGist(true);
+
+  // забираем то, что уже лежит в каталоге, чтобы не потерять другие материалы
+  let pack = { v: 1, materials: {} };
+  const cur = await gh("/gists/" + id);
+  if (cur.ok) {
+    const f = (await cur.json()).files[CAT_FILE];
+    if (f) {
+      let txt = f.content;
+      if (f.truncated && f.raw_url) txt = await (await withTimeout(fetch(f.raw_url), 20000)).text();
+      try { pack = JSON.parse(txt); pack.materials = pack.materials || {}; } catch {}
+    }
+  }
+
+  const files = {};
+  for (const mid of ids) {
+    const m = packMaterial(mid);
+    if (m.error) throw new Error(m.error);
+
+    // исходную картинку кладём отдельным файлом рядом
+    const src = (data.book.books.find(b => b.id === mid) || data.piano.pieces.find(p => p.id === mid) || {}).cover;
+    if (src && !src.startsWith("data:")) {
+      const uri = await fileToDataUri(src);
+      files[CAT_COVER_FILE(mid)] = { content: uri };
+      m.cover = true;
+    }
+    pack.materials[mid] = m;
+  }
+
+  pack.savedAt = now();
+  files[CAT_FILE] = { content: JSON.stringify(pack) };
+  const up = await gh("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files }) });
+  if (!up.ok) throw new Error("каталог не записался");
+
+  applyCatalog(pack);
+  return Object.keys(pack.materials).length;
+}
+
+function catalogUI() {
+  if (!cfg.token || !cfg.gistId)
+    return `<div class="freeze"><div class="fz-head">📚 <b>Каталог</b> — появится, когда подключишь синхронизацию</div></div>`;
+
+  const inCat = Object.keys(CATALOG);
+  const mats = achMaterials();
+  const when = cfg.catalogAt ? fmtDay(dateStr(new Date(cfg.catalogAt))) : "не загружался";
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">📚 <b>Каталог</b> — награды, карточки знаний и обложки могут жить в гисте, а не в коде приложения</div>
+      <div class="fz-empty">В каталоге: ${inCat.length ? esc(inCat.join(", ")) : "пусто"} · сверка ${esc(when)}</div>
+      <div class="fz-form2">
+        <button class="btn" id="catPull" type="button">Обновить из гиста</button>
+        <button class="btn" id="catDrop" type="button">Забыть каталог</button>
+      </div>
+      <div class="fz-head" style="margin-top:10px">Выгрузить материал в гист</div>
+      <div class="pick-row">
+        ${mats.map(m => `<button class="pick" data-catpush="${esc(keyOf(m))}" type="button">
+          <span class="pk-name">${m.icon} ${esc(m.title)}${CATALOG[keyOf(m)] ? " ✓" : ""}</span></button>`).join("")}
+      </div>
+    </div>`;
+}
+
+function bindCatalogUI() {
+  const pull = $("#catPull");
+  if (pull) pull.addEventListener("click", async () => {
+    toast("Смотрю каталог…");
+    try {
+      const n = await catalogPull(true);
+      toast(n ? `Загружено материалов: ${n}` : "Каталог пуст");
+      render();
+    } catch (e) { toast(e.message || "Не получилось"); }
+  });
+
+  const drop = $("#catDrop");
+  if (drop) drop.addEventListener("click", () => {
+    if (!confirm("Забыть загруженный каталог?\n\nПриложение вернётся к зашитым текстам и обложкам. Гист останется на месте.")) return;
+    Object.keys(CATALOG).forEach(id => { try { localStorage.removeItem(LS_COVER(id)); } catch {} });
+    CATALOG = {}; achCache.clear(); coverCache.clear();
+    try { localStorage.removeItem(LS_CAT); } catch {}
+    cfg.catalogAt = 0; saveCfg(); render();
+    toast("Каталог забыт");
+  });
+
+  document.querySelectorAll("[data-catpush]").forEach(b =>
+    b.addEventListener("click", async () => {
+      const id = b.dataset.catpush;
+      b.disabled = true;
+      toast("Выгружаю…");
+      try {
+        const n = await catalogPush([id]);
+        toast(`В каталоге материалов: ${n}`);
+        render();
+      } catch (e) { toast(e.message || "Не получилось"); b.disabled = false; }
+    }));
+}
+
 /* ══════════ Автокопия ══════════
    Раз в неделю кладём снимок всех данных в отдельный гист-архив: файл на месяц,
    двенадцать последних месяцев. Основной гист может испортиться или пропасть —
@@ -5353,7 +5618,7 @@ function renderSettingsSection(id) {
   } else if (id === "look") {
     body = themeUI() + dailyUI();
   } else if (id === "materials") {
-    body = archiveUI() || `<div class="empty-note">Материалов пока нет</div>`;
+    body = catalogUI() + (archiveUI() || "");
   } else if (id === "pause") {
     body = freezeUI();
   } else if (id === "data") {
@@ -5398,6 +5663,7 @@ function renderSettingsSection(id) {
   bindDailyUI();
   bindBackupUI();
   bindArchiveBackupUI();
+  bindCatalogUI();
   bindImportUI();
   bindShakeUI();
   bindArchiveUI();
@@ -5514,6 +5780,7 @@ async function syncNow(manual) {
     }
     cfg.lastSync = now(); saveCfg(); setSyncDot("ok");
     maybeArchive(box);                  // раз в неделю снимок уезжает в архив, молча
+    catalogPull(false).catch(() => {});  // каталог сверяем не чаще раза в сутки
     syncError = "";
     syncPickers();
     if (stampBefore !== dataStamp()) render(true);   // тихо и только если данные правда изменились
