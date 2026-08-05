@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 82";
+const APP_VERSION = "2026.08.05 · 83";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -4071,6 +4071,102 @@ function renderNotes() {
   syncNotesFabs();
 }
 
+/* ══════════ Мысль дня ══════════
+   Раз в день показываем одну из записанных мыслей и не повторяемся,
+   пока не покажем все. Состояние своё у каждого профиля. */
+
+const LS_DAILY = () => "keiko-daily" + suffix();
+
+function dailyState() {
+  try { return JSON.parse(localStorage.getItem(LS_DAILY()) || "{}") || {}; } catch { return {}; }
+}
+function saveDaily(st) {
+  try { localStorage.setItem(LS_DAILY(), JSON.stringify(st)); } catch {}
+}
+
+function maybeDailyThought() {
+  const st = dailyState();
+  if (st.off || st.date === todayStr()) return;
+  if (!data || !data.thoughts) return;
+  if ($("#cheer")?.classList.contains("show")) return;   // не перебиваем награды
+  if ($("#sheet")?.classList.contains("show")) return;
+
+  const list = thoughts();
+  if (!list.length) return;                              // нечего показывать — молчим
+
+  const seen = Array.isArray(st.seen) ? st.seen : [];
+  let pool = list.filter(t => !seen.includes(t.id));
+  const fresh = pool.length ? seen : [];                 // круг пройден — начинаем заново
+  if (!pool.length) {
+    const last = seen[seen.length - 1];                  // но вчерашнюю мысль не повторяем
+    pool = list.filter(t => t.id !== last);
+    if (!pool.length) pool = list;
+  }
+
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  saveDaily({ ...st, date: todayStr(), seen: [...fresh, pick.id].slice(-2000) });
+  showDailyThought(pick);
+}
+
+function showDailyThought(t) {
+  const mats = achMaterials();
+  const m = mats.find(x => keyOf(x) === t.key);
+  const a = (data.archive || []).find(x => x.id === t.key);
+  const src = m || a || null;
+  const icon = src ? (src.icon || "📖") : "📎";
+  const title = src ? src.title : "Архив";
+  const cover = src && src.cover ? src.cover : "";
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long", year: "numeric" });
+
+  $("#cheerIc").textContent = "💭";
+  $("#cheerTitle").textContent = "Мысль дня";
+  $("#cheerText").innerHTML = `
+    <span class="dt-src">
+      <span class="th-cover">${cover ? `<img src="${esc(cover)}" alt="">` : `<i>${icon}</i>`}</span>
+      <span class="dt-src-txt"><b>${esc(title)}</b><em>${esc(fmt.format(fromStr(t.date)))}</em></span>
+    </span>
+    <span class="dt-text">${esc(t.text)}</span>
+    <button class="th-link dt-like ${t.liked ? "on" : ""}" id="dtLike" type="button">${t.liked ? "♥ В любимых" : "♡ Нравится"}</button>`;
+  $("#cheerOk").textContent = "Спасибо";
+  $("#cheer").classList.remove("fact");
+  $("#cheer").classList.add("show", "daily");
+
+  $("#dtLike").addEventListener("click", () => {
+    const th = (data.thoughts || []).find(x => x.id === t.id);
+    if (!th) return;
+    th.liked = !th.liked;
+    th.updatedAt = now();
+    saveData(); schedulePush();
+    const b = $("#dtLike");
+    b.classList.toggle("on", !!th.liked);
+    b.textContent = th.liked ? "♥ В любимых" : "♡ Нравится";
+    if (navigator.vibrate) navigator.vibrate(12);
+  });
+}
+
+function dailyUI() {
+  const st = dailyState();
+  return `
+    <div class="freeze">
+      <div class="fz-head">💭 <b>Мысль дня</b> — раз в день показываю одну из записанных мыслей, без повторов</div>
+      <div class="pick-row">
+        <button class="pick ${!st.off ? "on" : ""}" data-daily="on" type="button"><span class="pk-name">Показывать</span></button>
+        <button class="pick ${st.off ? "on" : ""}" data-daily="off" type="button"><span class="pk-name">Не показывать</span></button>
+      </div>
+    </div>`;
+}
+
+function bindDailyUI() {
+  document.querySelectorAll("[data-daily]").forEach(b =>
+    b.addEventListener("click", () => {
+      const st = dailyState();
+      st.off = b.dataset.daily === "off";
+      saveDaily(st);
+      render();
+      toast(st.off ? "Мысль дня выключена" : "Мысль дня включена");
+    }));
+}
+
 // кнопки в углу ленты мыслей: счётчик любимых и кубик со случайной записью
 function syncNotesFabs() {
   const like = $("#likeFab"), dice = $("#diceFab");
@@ -5097,7 +5193,7 @@ function renderSettingsSection(id) {
   } else if (id === "goal") {
     body = goalUI();
   } else if (id === "look") {
-    body = themeUI();
+    body = themeUI() + dailyUI();
   } else if (id === "materials") {
     body = archiveUI() || `<div class="empty-note">Материалов пока нет</div>`;
   } else if (id === "pause") {
@@ -5141,6 +5237,7 @@ function renderSettingsSection(id) {
   bindFreezeUI();
   bindGoalUI();
   bindThemeUI();
+  bindDailyUI();
   bindBackupUI();
   bindImportUI();
   bindShakeUI();
@@ -5261,6 +5358,7 @@ async function syncNow(manual) {
     syncPickers();
     if (stampBefore !== dataStamp()) render(true);   // тихо и только если данные правда изменились
     else renderBanner();
+    maybeDailyThought();               // мысли могли приехать из гиста только что
     if (manual) toast("Синхронизировано");
   } catch (e) {
     if (!navigator.onLine) { online = false; setSyncDot("off"); renderBanner(); return; }
@@ -5355,10 +5453,12 @@ function boot() {
 
   $("#sheetBg").addEventListener("click", closeSheet);
   $("#cheerOk").addEventListener("click", () => {
-    $("#cheer").classList.remove("show");
+    $("#cheer").classList.remove("show", "daily");
     if (overlayQueue.length) setTimeout(showNextOverlay, 220);
   });
-  $("#cheer").addEventListener("click", e => { if (e.target === e.currentTarget) $("#cheer").classList.remove("show"); });
+  $("#cheer").addEventListener("click", e => {
+    if (e.target === e.currentTarget) $("#cheer").classList.remove("show", "daily");
+  });
 
   window.addEventListener("resize", syncTabHeight);
   window.addEventListener("orientationchange", () => setTimeout(syncTabHeight, 200));
@@ -5369,6 +5469,7 @@ function boot() {
   });
 
   render();
+  setTimeout(maybeDailyThought, 900);
   checkForUpdate();
   if (cfg.token && cfg.gistId && navigator.onLine) { setSyncDot("ok"); syncNow(false); }
 
