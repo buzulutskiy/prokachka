@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 75";
+const APP_VERSION = "2026.08.03 · 76";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -53,6 +53,7 @@ const DEFAULT_BOOKS = [
     pages: 361,
     startPage: 183,
     art: "snow", tone: "snow",
+    cover: "covers/snow.jpg", ratio: "514 / 720",
     chapters: [
       { name: "Феномен изображения", from: 6 },
       { name: "Цапля и журавль", from: 125 },
@@ -69,6 +70,7 @@ const DEFAULT_BOOKS = [
     pages: 464,
     startPage: 0,
     art: "wave", tone: "wine",
+    cover: "covers/odyssey.jpg", ratio: "510 / 720",
     // страницы — по оглавлению издания «Носорога»
     chapters: [
       { name: "Песнь I. Совет богов. Афина у Телемаха", from: 7 },
@@ -109,6 +111,7 @@ const DEFAULT_BOOKS = [
     pages: 240,
     startPage: 0,
     art: "pine", tone: "forest",
+    cover: "covers/tesson.jpg", ratio: "470 / 720",
     // страницы месяцев — расчётные: дневник идёт почти равномерно
     chapters: [
       { name: "Шаг в сторону", from: 1 },

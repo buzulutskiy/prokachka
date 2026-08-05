@@ -1,5 +1,5 @@
-const CACHE = "prokachka-v75";
-const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./covers/screwtape.jpg", "./covers/unizhennye.jpg", "./icon-192.png", "./icon-512.png"];
+const CACHE = "prokachka-v76";
+const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./covers/screwtape.jpg", "./covers/unizhennye.jpg", "./covers/snow.jpg", "./covers/odyssey.jpg", "./covers/tesson.jpg", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
