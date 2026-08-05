@@ -1,4 +1,4 @@
-const CACHE = "prokachka-v64";
+const CACHE = "prokachka-v65";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -18,22 +18,32 @@ self.addEventListener("fetch", (e) => {
   if (url.origin !== location.origin) return;        // GitHub API — только сеть
   if (url.pathname.endsWith("version.json")) return; // проверка версии — всегда из сети
 
-  // на iOS сеть тоже ходит через кэш Safari — просим свежую копию явно
-  const fresh = (() => {
-    try { return new Request(e.request.url, { cache: "reload", credentials: "same-origin" }); }
-    catch { return e.request; }
-  })();
+  e.respondWith((async () => {
+    // 1. точное совпадение в кэше — отдаём сразу, не дожидаясь сети.
+    //    Свежесть обеспечивает version.json: при новой версии придёт баннер обновления
+    const hit = await caches.match(e.request);
+    if (hit) {
+      // тихо обновляем копию в фоне, ответ пользователю уже ушёл
+      fetch(new Request(e.request.url, { cache: "reload", credentials: "same-origin" }))
+        .then((r) => { if (r && r.ok) caches.open(CACHE).then((c) => c.put(e.request, r)); })
+        .catch(() => {});
+      return hit;
+    }
 
-  e.respondWith(
-    fetch(fresh)
-      .then((r) => {
-        const copy = r.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return r;
-      })
-      .catch(() =>
-      // без сети ищем в кэше, не глядя на ?v=… — иначе app.js?v=62 не находится
-      caches.match(e.request, { ignoreSearch: true })
-        .then((r) => r || (e.request.mode === "navigate" ? caches.match("./index.html") : undefined)))
-  );
+    // 2. в кэше нет (например, новая метка версии) — идём в сеть
+    try {
+      const r = await fetch(new Request(e.request.url, { cache: "reload", credentials: "same-origin" }));
+      if (r && r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
+      return r;
+    } catch {
+      // 3. сети нет — ищем в кэше, не глядя на ?v=…
+      const any = await caches.match(e.request, { ignoreSearch: true });
+      if (any) return any;
+      if (e.request.mode === "navigate") {
+        const page = await caches.match("./index.html", { ignoreSearch: true });
+        if (page) return page;
+      }
+      return Response.error();
+    }
+  })());
 });

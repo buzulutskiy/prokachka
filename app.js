@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 64";
+const APP_VERSION = "2026.08.03 · 65";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -4408,8 +4408,9 @@ function rollDice() {
 
 // сверяем свою версию с той, что лежит на сервере — мимо всех кэшей
 async function checkForUpdate() {
+  if (!navigator.onLine) return;
   try {
-    const r = await fetch("version.json?ts=" + Date.now(), { cache: "no-store" });
+    const r = await withTimeout(fetch("version.json?ts=" + Date.now(), { cache: "no-store" }), 5000);
     if (!r.ok) return;
     const j = await r.json();
     if (j.version && j.version !== APP_VERSION) {
@@ -4596,9 +4597,17 @@ function bindThemeUI() {
 function setSyncDot(state) { $("#syncDot").className = "sync-dot" + (state ? " " + state : ""); }
 
 function gh(path, opts = {}) {
-  return fetch("https://api.github.com" + path, Object.assign({
+  return withTimeout(fetch("https://api.github.com" + path, Object.assign({
     headers: { "Authorization": "Bearer " + cfg.token, "Accept": "application/vnd.github+json" }
-  }, opts));
+  }, opts)), 12000);
+}
+
+// без потолка по времени запрос в самолёте висит до системного таймаута — и всё приложение ждёт
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error("нет связи")), ms))
+  ]);
 }
 
 async function connectGitHub(token) {
@@ -4645,6 +4654,7 @@ function mergeLists(local, remote) {
 
 async function syncNow(manual) {
   if (!cfg.token || !cfg.gistId || syncing) { if (manual && !cfg.token) openSettingsSheet(); return; }
+  if (!navigator.onLine) { online = false; setSyncDot("off"); renderBanner(); return; }
   syncing = true; setSyncDot("busy");
   try {
     const r = await gh("/gists/" + cfg.gistId);
@@ -4775,7 +4785,7 @@ function boot() {
 
   render();
   checkForUpdate();
-  if (cfg.token && cfg.gistId) { setSyncDot("ok"); syncNow(false); }
+  if (cfg.token && cfg.gistId && navigator.onLine) { setSyncDot("ok"); syncNow(false); }
 
 
 }
