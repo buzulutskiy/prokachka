@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 58";
+const APP_VERSION = "2026.08.03 · 59";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -199,7 +199,6 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
-let notesView = null;      // выбранный материал в разделе «Мысли»
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
 let tab = "home";                 // home | progress | ach | overview
@@ -3664,74 +3663,65 @@ const whereLabel = (t) => t.unit === "page" ? `стр. ${t.at}`
 
 function renderNotes() {
   if (!hasMaterials()) { renderEmpty("Мыслей пока нет", "Они появятся вместе с первым материалом."); return; }
-  if (notesView) { renderNotesMaterial(notesView); return; }
 
   const mats = achMaterials();
-  $("#view").innerHTML = `
-    <div class="mat-list">
-      ${mats.map(m => {
-        const n = thoughtsOf(keyOf(m)).length;
-        return `
-        <button class="mat-card" data-notes="${esc(keyOf(m))}" data-track="${m.track}"
-          data-piece="${m.pieceId || ""}" data-book="${m.bookId || ""}" type="button">
-          <span class="mc-tile t-${m.track}"><i>${m.icon}</i></span>
-          <span class="mc-body">
-            <span class="mc-title">${esc(m.title)}</span>
-            ${m.sub ? `<span class="mc-sub">${esc(m.sub)}</span>` : ""}
-            <span class="mc-tags"><em>✎ ${n || "пока пусто"}</em></span>
-          </span>
-          <span class="mc-go">›</span>
-        </button>`;
-      }).join("")}
-    </div>`;
+  const key = (cfg.thoughtKey && mats.some(m => keyOf(m) === cfg.thoughtKey)) ? cfg.thoughtKey : currentKey();
+  const cur = mats.find(m => keyOf(m) === key) || mats[0];
+  const where = withMaterial(viewOf(cur), () => whereNow(cur.track));
+  const unitName = where.unit === "page" ? "стр." : where.unit === "lesson" ? "урок" : "такт";
 
-  document.querySelectorAll("[data-notes]").forEach(b =>
-    b.addEventListener("click", () => {
-      notesView = { key: b.dataset.notes, track: b.dataset.track,
-        pieceId: b.dataset.piece || null, bookId: b.dataset.book || null };
-      cfg.notesView = notesView; saveCfg();
-      renderNotes();
-      $("#view").scrollTop = 0;
-    }));
-}
-
-function renderNotesMaterial(view) {
-  const mats = achMaterials();
-  const m = mats.find(x => keyOf(x) === view.key) || mats[0];
-  const list = thoughtsOf(view.key);
+  const list = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+  const titleOf = (t) => {
+    const m = mats.find(x => keyOf(x) === t.key);
+    return m ? `${m.icon} ${m.title}` : "📎 архив";
+  };
 
   $("#view").innerHTML = `
-    <button class="back" id="notesBack" type="button">‹ Все материалы</button>
-
-    <div class="ach-top">
-      <div class="ach-hero">
-        <span class="mc-tile big t-${m.track}"><i>${m.icon}</i></span>
-        <span class="ach-hero-txt">
-          <b>${esc(m.title)}</b>
-          <em>${list.length ? `${list.length} ${plural(list.length, "мысль", "мысли", "мыслей")}` : "мыслей пока нет"}</em>
+    <div class="panel th-panel">
+      <div class="th-row">
+        <select class="note-input th-pick" id="thMat">
+          ${mats.map(m => `<option value="${esc(keyOf(m))}" ${keyOf(m) === key ? "selected" : ""}>${m.icon} ${esc(m.title)}</option>`).join("")}
+        </select>
+        <span class="th-at">${unitName}
+          <input class="note-input" id="thAt" type="number" inputmode="numeric" min="0" max="9999" value="${where.at}">
         </span>
       </div>
+      <textarea class="note-input th-text" id="thText" rows="3" placeholder="Что подумалось? Пара строк для себя"></textarea>
+      <button class="btn gold" id="thSave" type="button">Записать</button>
     </div>
-
-    <button class="btn gold add-thought" id="addThought" type="button">✎ Записать мысль</button>
 
     ${list.length ? `<div class="feed">
       ${list.map(t => `
         <article class="post thought">
-          <div class="th-meta">${esc(whereLabel(t))} · ${esc(fmt.format(fromStr(t.date)))}
+          <div class="th-meta">${esc(titleOf(t))} · ${esc(whereLabel(t))} · ${esc(fmt.format(fromStr(t.date)))}
             <button class="th-del" data-th="${t.id}" type="button">✕</button>
           </div>
           <p class="post-text">${esc(t.text)}</p>
         </article>`).join("")}
     </div>` : `<div class="empty-note">Здесь будут мысли, которые приходят по ходу.<br>Первую можно записать прямо сейчас.</div>`}`;
 
-  $("#notesBack").addEventListener("click", () => {
-    notesView = null; cfg.notesView = null; saveCfg();
+  $("#thMat").addEventListener("change", (e) => {
+    cfg.thoughtKey = e.target.value; saveCfg();
+    const text = $("#thText").value;
     renderNotes();
-    $("#view").scrollTop = 0;
+    $("#thText").value = text;                  // не теряем начатую мысль при смене материала
   });
-  $("#addThought").addEventListener("click", () => openThoughtSheet(view, m));
+
+  $("#thSave").addEventListener("click", () => {
+    const text = ($("#thText").value || "").trim();
+    if (!text) { toast("Напиши пару слов"); return; }
+    data.thoughts.push({
+      id: uid(), key, track: cur.track,
+      unit: where.unit, at: Math.max(0, Math.round(Number($("#thAt").value) || 0)),
+      text: text.slice(0, 2000), date: todayStr(),
+      createdAt: now(), updatedAt: now()
+    });
+    cfg.thoughtKey = key; saveCfg();
+    saveData(); schedulePush();
+    renderNotes();
+    toast("Записано");
+  });
 
   document.querySelectorAll("[data-th]").forEach(b =>
     b.addEventListener("click", () => {
@@ -3743,42 +3733,8 @@ function renderNotesMaterial(view) {
     }));
 }
 
-function openThoughtSheet(view, m) {
-  const where = withMaterial(view, () => whereNow(view.track));
-  const unitName = where.unit === "page" ? "Страница" : where.unit === "lesson" ? "Урок" : "Такт";
-
-  sheetMode = "thought";
-  openSheet(`
-    <h3>Мысль</h3>
-    <p class="sub">${esc(m.title)}</p>
-    <div class="th-form">
-      <label class="th-lab">${unitName}
-        <input class="note-input" id="thAt" type="number" inputmode="numeric" min="0" max="9999" value="${where.at}">
-      </label>
-      <textarea class="note-input th-text" id="thText" rows="6"
-        placeholder="Что подумалось? Пара строк для себя"></textarea>
-    </div>
-    <div class="sheet-actions">
-      <button class="btn gold" id="thSave" type="button">Сохранить</button>
-      <button class="btn" id="thClose" type="button">Отмена</button>
-    </div>`);
-
-  $("#thClose").addEventListener("click", closeSheet);
-  $("#thSave").addEventListener("click", () => {
-    const text = ($("#thText").value || "").trim();
-    if (!text) { toast("Напиши пару слов"); return; }
-    data.thoughts.push({
-      id: uid(), key: view.key, track: view.track,
-      unit: where.unit, at: Math.max(0, Math.round(Number($("#thAt").value) || 0)),
-      text: text.slice(0, 2000), date: todayStr(),
-      createdAt: now(), updatedAt: now()
-    });
-    saveData(); schedulePush();
-    closeSheet();
-    renderNotes();
-    toast("Записано");
-  });
-}
+// материал в том виде, в каком его понимает withMaterial
+const viewOf = (m) => ({ track: m.track, pieceId: m.pieceId || null, bookId: m.bookId || null });
 
 /* ══════════ Монеты и магазин ══════════
    Баланс считается из данных: заработано минус потрачено.
@@ -4785,7 +4741,6 @@ function boot() {
   if (cfg.achView && cfg.achView.track) achView = cfg.achView;
   if (cfg.achTab === "facts") achTab = "facts";
   if (cfg.achTop === "shelf") achTop = "shelf";
-  if (cfg.notesView && cfg.notesView.key) notesView = cfg.notesView;
   const t = new Date();
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();

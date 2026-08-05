@@ -1262,7 +1262,14 @@
     .shelf-review { width: 100%; min-height: 92px; resize: none; }
 
     /* ── Мысли ───────────────────────── */
-    .add-thought { margin-bottom: 12px; }
+    .th-panel { display: grid; gap: 9px; }
+    .th-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+    .th-pick { margin-top: 0; min-width: 0; }
+    .th-at {
+      display: grid; gap: 4px; justify-items: center;
+      font-size: 0.7rem; color: var(--dim); white-space: nowrap;
+    }
+    .th-at .note-input { margin-top: 0; width: 78px; text-align: center; }
     .post.thought { display: grid; gap: 8px; }
     .th-meta {
       display: flex; align-items: center; gap: 8px;
