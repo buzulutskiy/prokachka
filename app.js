@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 72";
+const APP_VERSION = "2026.08.03 · 73";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -4614,6 +4614,7 @@ function openSettingsSheet() {
       </div>
       ${goalUI()}
       ${themeUI()}
+      ${backupUI()}
       ${importUI()}
       ${shakeUI()}
       ${archiveUI()}
@@ -4632,6 +4633,7 @@ function openSettingsSheet() {
       </div>
       ${goalUI()}
       ${themeUI()}
+      ${backupUI()}
       ${importUI()}
       ${shakeUI()}
       ${archiveUI()}
@@ -4646,6 +4648,7 @@ function openSettingsSheet() {
   bindFreezeUI();
   bindGoalUI();
   bindThemeUI();
+  bindBackupUI();
   bindImportUI();
   bindShakeUI();
   bindArchiveUI();
@@ -4734,6 +4737,97 @@ async function importPack(url) {
       : "Всё уже перенесено");
   } catch (e) {
     toast("Не вышло: " + (e.message || "ошибка"));
+  }
+}
+
+/* ── Резервная копия: файл со всеми данными профиля ── */
+
+function backupBlob() {
+  const pack = {
+    app: "keiko", v: 1, savedAt: now(),
+    version: APP_VERSION, profile: profileId,
+    data: exportData()
+  };
+  return new Blob([JSON.stringify(pack, null, 1)], { type: "application/json" });
+}
+
+async function exportBackup() {
+  const name = `keiko-${profileId}-${todayStr()}.json`;
+  const blob = backupBlob();
+  try {
+    const file = new File([blob], name, { type: "application/json" });
+    // на телефоне удобнее системное «Поделиться»: можно сохранить в Файлы или отправить себе
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Кэйко — копия данных" });
+      return;
+    }
+  } catch { return; }        // пользователь закрыл окно — это не ошибка
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast("Копия сохранена");
+}
+
+// восстановление сливает копию с тем, что есть: ничего не затирается
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let pack;
+    try { pack = JSON.parse(reader.result); } catch { toast("Файл не читается"); return; }
+    const d = pack && (pack.data || pack);
+    if (!d || !d.piano) { toast("Это не копия Кэйко"); return; }
+
+    if (pack.profile && pack.profile !== profileId &&
+        !confirm(`Копия сделана в профиле «${pack.profile}», а сейчас открыт «${profileId}».\n\nВсё равно восстановить сюда?`)) return;
+
+    const before = dataStamp();
+    data.piano.entries = mergeLists(data.piano.entries, d.piano.entries || []);
+    data.book.entries = mergeLists(data.book.entries, (d.book && d.book.entries) || []);
+    data.pastel.entries = mergeLists(data.pastel.entries, (d.pastel && d.pastel.entries) || []);
+    data.thoughts = mergeLists(data.thoughts || [], d.thoughts || []);
+    data.archive = mergeLists(data.archive || [], d.archive || []);
+    data.freezes = mergeLists(data.freezes || [], d.freezes || []);
+
+    // материалы, которых у нас нет, тоже возвращаем
+    for (const p of (d.piano.pieces || [])) if (!data.piano.pieces.some(x => x.id === p.id)) data.piano.pieces.push(p);
+    for (const b of ((d.book && d.book.books) || [])) if (!data.book.books.some(x => x.id === b.id)) data.book.books.push(b);
+
+    normalizeActive();
+    saveData(); schedulePush();
+    closeSheet(); render();
+    toast(before === dataStamp() ? "Всё это уже было" : "Данные восстановлены");
+  };
+  reader.readAsText(file);
+}
+
+function backupUI() {
+  const counts = [
+    [data.piano.entries.length + data.book.entries.length + data.pastel.entries.length, "занятие", "занятия", "занятий"],
+    [(data.thoughts || []).filter(t => !t.deleted).length, "мысль", "мысли", "мыслей"],
+    [(data.archive || []).filter(a => !a.deleted).length, "книга на полке", "книги на полке", "книг на полке"]
+  ].map(([n, a, b, c]) => `${n} ${plural(n, a, b, c)}`).join(" · ");
+
+  return `
+    <div class="freeze">
+      <div class="fz-head">💾 <b>Копия данных</b> — файл со всем, что накопилось: ${counts}</div>
+      <div class="fz-form2">
+        <button class="btn" id="bkSave" type="button">Сохранить копию</button>
+        <button class="btn" id="bkLoad" type="button">Восстановить из копии</button>
+      </div>
+      <input type="file" id="bkFile" accept="application/json,.json" style="display:none">
+      <div class="fz-empty">Восстановление ничего не затирает: записи сливаются по времени изменения.</div>
+    </div>`;
+}
+
+function bindBackupUI() {
+  const save = $("#bkSave"), load = $("#bkLoad"), file = $("#bkFile");
+  if (save) save.addEventListener("click", exportBackup);
+  if (load && file) {
+    load.addEventListener("click", () => file.click());
+    file.addEventListener("change", () => { if (file.files[0]) restoreBackup(file.files[0]); });
   }
 }
 
