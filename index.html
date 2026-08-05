@@ -1117,7 +1117,13 @@
     }
     input[type="date"].note-input {
       width: 100%; min-width: 0; height: 46px;
-      text-align: left; display: block;
+      text-align: left;
+      display: flex; align-items: center;      /* иначе iOS прижимает дату к верхнему краю */
+      line-height: normal;
+    }
+    input[type="date"]::-webkit-datetime-edit {
+      display: flex; align-items: center;
+      height: 100%; padding: 0;
     }
     /* без этого iOS прижимает дату к правому краю */
     input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }

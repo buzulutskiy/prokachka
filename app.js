@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 71";
+const APP_VERSION = "2026.08.03 · 72";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -2118,6 +2118,7 @@ function bindFreezeUI() {
     b.addEventListener("click", () => {
       const f = data.freezes.find(x => x.id === b.dataset.fz);
       if (!f) return;
+      if (!confirm("Убрать эту паузу?\n\nДни снова начнут рвать серию.")) return;
       f.deleted = true; f.updatedAt = now();
       saveData(); schedulePush();
       openSettingsSheet();
@@ -2311,6 +2312,7 @@ function showDone(before, after, wasExisting) {
 function deleteEntry(id) {
   const e = trackOf().entries.find(x => x.id === id);
   if (!e) return;
+  if (!confirm(`Удалить запись за ${fmtDay(e.date)}?\n\nПрогресс по этому дню пропадёт.`)) return;
   e.deleted = true; e.updatedAt = now();
   saveData(); schedulePush(); syncPickers(); render();
   toast("Запись удалена");
@@ -3387,6 +3389,7 @@ function renderDayBox() {
       const track = b.dataset.track;
       const e = data[track].entries.find(x => x.id === b.dataset.del);
       if (!e) return;
+      if (!confirm(`Удалить запись за ${fmtDay(e.date)}?\n\nПрогресс по этому дню пропадёт.`)) return;
       e.deleted = true; e.updatedAt = now();
       saveData(); schedulePush(); render();
       toast("Запись удалена");
@@ -4126,12 +4129,22 @@ function openShelfSheet(id) {
     <div class="sheet-actions">
       <button class="btn gold" id="shelfSave" type="button">Сохранить</button>
       <button class="btn" id="shelfClose" type="button">Закрыть</button>
+      <button class="btn danger" id="shelfDel" type="button">Убрать с полки</button>
     </div>`);
 
   const paint = () => { $("#starPick").innerHTML = stars(rating, "st"); bindStars(); };
   const bindStars = () => document.querySelectorAll("#starPick .st").forEach(el =>
     el.addEventListener("click", () => { rating = +el.dataset.star; paint(); }));
   bindStars();
+
+  const del = $("#shelfDel");
+  if (del) del.addEventListener("click", () => {
+    if (!confirm(`Убрать «${a.title}» с полки?\n\nОценка и отзыв пропадут.`)) return;
+    a.deleted = true; a.updatedAt = now();
+    saveData(); schedulePush();
+    closeSheet(); render();
+    toast("Убрано с полки");
+  });
 
   $("#shelfSave").addEventListener("click", () => {
     a.rating = rating;
@@ -4638,7 +4651,10 @@ function openSettingsSheet() {
   bindArchiveUI();
   if (connected) {
     $("#sSync").addEventListener("click", () => { closeSheet(); syncNow(true); });
-    $("#sOff").addEventListener("click", () => { cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); closeSheet(); toast("Отключено"); });
+    $("#sOff").addEventListener("click", () => {
+      if (!confirm("Отключить синхронизацию?\n\nЗаписи останутся на устройстве, но перестанут уходить в гист — и записывать новые будет нельзя, пока не подключишь снова.")) return;
+      cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); closeSheet(); toast("Отключено");
+    });
   } else {
     $("#sConnect").addEventListener("click", () => connectGitHub($("#sToken").value.trim()));
   }
