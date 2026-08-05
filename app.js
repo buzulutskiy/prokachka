@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 69";
+const APP_VERSION = "2026.08.03 · 70";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -4034,7 +4034,9 @@ function renderShelf() {
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short", year: "numeric" });
   const when = (ds) => fmt.format(fromStr(ds)).replace(" г.", "");
 
-  $("#view").innerHTML = list.length ? `
+  $("#view").innerHTML = `
+    <button class="btn add-book" id="shelfAdd" type="button">＋ Добавить прочитанную книгу</button>
+    ` + (list.length ? `
     <div class="shelf">
       ${list.map(a => `
         <button class="leaf" data-shelf="${a.id}" type="button">
@@ -4049,10 +4051,58 @@ function renderShelf() {
           </span>
         </button>`).join("")}
     </div>` : `
-    <div class="empty-note">Полка пока пуста.<br>Сюда попадает всё, что доведено до конца, — с оценкой и отзывом.</div>`;
+    <div class="empty-note">Полка пока пуста.<br>Сюда попадает всё, что доведено до конца, — с оценкой и отзывом.</div>`);
 
+  $("#shelfAdd").addEventListener("click", openAddBookSheet);
   document.querySelectorAll("[data-shelf]").forEach(b =>
     b.addEventListener("click", () => openShelfSheet(b.dataset.shelf)));
+}
+
+// книга, прочитанная когда-то давно: всё кроме названия можно не заполнять
+function openAddBookSheet() {
+  sheetMode = "addbook";
+  openSheet(`
+    <h3>Книга на полку</h3>
+    <p class="sub">Обязательно только название — остальное как вспомнится</p>
+    <div class="add-form">
+      <input class="note-input" id="abTitle" placeholder="Название" maxlength="120">
+      <input class="note-input" id="abAuthor" placeholder="Автор" maxlength="120">
+      <input class="note-input" id="abPages" type="number" inputmode="numeric" min="1" max="9999" placeholder="Сколько страниц">
+      <label class="ab-lab">Начал(а)<input class="note-input" id="abFrom" type="date" max="2100-01-01"></label>
+      <label class="ab-lab">Закончил(а)<input class="note-input" id="abTo" type="date" max="2100-01-01" value="${todayStr()}"></label>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn gold" id="abSave" type="button">На полку</button>
+      <button class="btn" id="abClose" type="button">Отмена</button>
+    </div>`);
+
+  $("#abClose").addEventListener("click", closeSheet);
+  $("#abSave").addEventListener("click", () => {
+    const title = ($("#abTitle").value || "").trim();
+    if (!title) { toast("Как называется?"); return; }
+
+    const from = $("#abFrom").value || "";
+    const to = $("#abTo").value || todayStr();
+    const pages = Math.round(Number($("#abPages").value) || 0);
+    let days = 0;
+    if (from && from <= to) days = daysBetween(from, to) + 1;
+
+    const rec = {
+      id: uid(), track: "book", icon: "📖",
+      title, sub: ($("#abAuthor").value || "").trim(),
+      pct: 100, days,
+      pages: pages || 0,
+      art: "", tone: "snow",
+      startedAt: from || to, finishedAt: to,
+      rating: 0, review: "",
+      createdAt: now(), updatedAt: now()
+    };
+    data.archive.push(rec);
+    saveData(); schedulePush();
+    closeSheet();
+    render();
+    openShelfSheet(rec.id);        // сразу предлагаем оценить и записать пару строк
+  });
 }
 
 // шторка: звёзды и отзыв
