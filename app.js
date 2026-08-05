@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 73";
+const APP_VERSION = "2026.08.03 · 74";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -201,6 +201,7 @@ let period = "week";   // week | month — что показываем на «П
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
 let online = navigator.onLine !== false;   // офлайн — не ошибка, а режим работы
 let editingThought = null; // мысль, которую сейчас правим
+let settingsOpen = false, settingsView = null;   // настройки — отдельный экран
 let notesFocus = false;    // ставить ли курсор в поле мысли при следующем рендере
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
@@ -2458,8 +2459,9 @@ function renderInner() {
   renderBanner();
   renderTabbar();
   // главная всегда влезает в экран, остальные вкладки скроллятся внутри себя
-  $("#view").className = (tab === "home" ? "fixed" : "scrolls") + (quietRender ? " quiet" : "");
-  if (tab === "home") renderHome();
+  $("#view").className = (tab === "home" && !settingsOpen ? "fixed" : "scrolls") + (quietRender ? " quiet" : "");
+  if (settingsOpen) renderSettings();
+  else if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
   else if (tab === "notes") renderNotes();
   else renderAch();
@@ -2494,6 +2496,7 @@ function renderTabbar() {
   document.querySelectorAll("#tabbar button").forEach(b =>
     b.addEventListener("click", () => {
       tab = b.dataset.tab;
+      settingsOpen = false; settingsView = null;
       if (tab === "notes") notesFocus = true;
       cfg.tab = tab; saveCfg();
       render();
@@ -3690,27 +3693,12 @@ function keyOf(m) {
 }
 const currentKey = () => isBook() ? book().id : isPastel() ? "pastel" : (piece() ? piece().id : "");
 
-// где человек сейчас — подставим в новую мысль
-function whereNow(track) {
-  if (track === "book") return { unit: "page", at: bookProgress() };
-  if (track === "pastel") return { unit: "lesson", at: doneLessons().size };
-  const p = passes();
-  let last = 0;
-  for (let i = 1; i < p.right.length; i++) if (p.right[i] || p.left[i]) last = i;
-  return { unit: "bar", at: last };
-}
-const whereLabel = (t) => t.unit === "page" ? `стр. ${t.at}`
-  : t.unit === "lesson" ? `урок ${t.at}`
-  : `такт ${t.at}`;
-
 function renderNotes() {
   if (!hasMaterials()) { renderEmpty("Мыслей пока нет", "Они появятся вместе с первым материалом."); return; }
 
   const mats = achMaterials();
   const key = (cfg.thoughtKey && mats.some(m => keyOf(m) === cfg.thoughtKey)) ? cfg.thoughtKey : currentKey();
   const cur = mats.find(m => keyOf(m) === key) || mats[0];
-  const where = withMaterial(viewOf(cur), () => whereNow(cur.track));
-  const unitName = where.unit === "page" ? "стр." : where.unit === "lesson" ? "урок" : "такт";
 
   const list = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
@@ -3786,7 +3774,6 @@ function renderNotes() {
     if (!text) { toast("Напиши пару слов"); return; }
     data.thoughts.push({
       id: uid(), key, track: cur.track,
-      unit: where.unit, at: where.at,
       text: text.slice(0, 2000), date: todayStr(),
       createdAt: now(), updatedAt: now()
     });
@@ -4594,75 +4581,6 @@ function openAboutSheet() {
   $("#aboutClose").addEventListener("click", closeSheet);
 }
 
-function openSettingsSheet() {
-  sheetMode = "settings";
-  const connected = cfg.token && cfg.gistId;
-  openSheet(`
-    <h3>Настройки</h3>
-    <p class="sub">Чтобы ничего не потерялось</p>
-    <div class="info-note prof-note">
-      Профиль: <b>${esc(profile().name)}</b> — свои материалы и прогресс, гист общий
-      <button class="btn" id="sProfile" type="button">Сменить</button>
-    </div>
-    ${connected ? `
-      <div class="info-note">Синхронизация через гист <b>${esc(cfg.gistId)}</b></div>
-      <div class="sheet-actions">
-        <button class="btn gold" id="sSync" type="button">Синхронизировать</button>
-        <button class="btn danger" id="sOff" type="button">Отключить</button>
-        <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
-        <button class="btn" id="sClose" type="button">Закрыть</button>
-      </div>
-      ${goalUI()}
-      ${themeUI()}
-      ${backupUI()}
-      ${importUI()}
-      ${shakeUI()}
-      ${archiveUI()}
-      ${freezeUI()}
-      <div class="version">Версия ${APP_VERSION}</div>
-      <div class="diag">${diagLine()}</div>` : `
-      <div class="info-note">
-        Подключи <b>GitHub Gist</b>, чтобы прогресс жил на всех устройствах.<br>
-        Токен: <a href="https://github.com/settings/tokens/new?description=%D0%9F%D1%80%D0%BE%D0%BA%D0%B0%D1%87%D0%BA%D0%B0&scopes=gist" target="_blank" rel="noopener">classic со scope gist</a>
-      </div>
-      <input class="note-input" id="sToken" type="password" placeholder="ghp_…" autocomplete="off">
-      <div class="sheet-actions">
-        <button class="btn gold" id="sConnect" type="button">Подключить</button>
-        <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
-        <button class="btn" id="sClose" type="button">Закрыть</button>
-      </div>
-      ${goalUI()}
-      ${themeUI()}
-      ${backupUI()}
-      ${importUI()}
-      ${shakeUI()}
-      ${archiveUI()}
-      ${freezeUI()}
-      <div class="version">Версия ${APP_VERSION}</div>
-      <div class="diag">${diagLine()}</div>`}`);
-
-  $("#sClose").addEventListener("click", closeSheet);
-  $("#sUpdate").addEventListener("click", forceUpdate);
-  const pr = $("#sProfile");
-  if (pr) pr.addEventListener("click", () => { closeSheet(); switchProfile(); });
-  bindFreezeUI();
-  bindGoalUI();
-  bindThemeUI();
-  bindBackupUI();
-  bindImportUI();
-  bindShakeUI();
-  bindArchiveUI();
-  if (connected) {
-    $("#sSync").addEventListener("click", () => { closeSheet(); syncNow(true); });
-    $("#sOff").addEventListener("click", () => {
-      if (!confirm("Отключить синхронизацию?\n\nЗаписи останутся на устройстве, но перестанут уходить в гист — и записывать новые будет нельзя, пока не подключишь снова.")) return;
-      cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); closeSheet(); toast("Отключено");
-    });
-  } else {
-    $("#sConnect").addEventListener("click", () => connectGitHub($("#sToken").value.trim()));
-  }
-}
-
 // оформление живёт в настройках: цвета и «миры», меняющие интерфейс целиком
 function themeUI() {
   const cur = data.shop.theme || "dusk";
@@ -4681,22 +4599,6 @@ function themeUI() {
     </div>`;
 }
 
-function importUI() {
-  if (profileId !== "diana") return "";
-  return `
-    <div class="freeze">
-      <div class="fz-head">📥 <b>Перенос из читалки</b> — прочитанные книги на полку, выписки в мысли</div>
-      <div class="fz-empty">Сейчас на полке: <b>${(data.archive || []).filter(a => !a.deleted).length}</b>,
-        мыслей: <b>${(data.thoughts || []).filter(t => !t.deleted).length}</b></div>
-      <button class="btn" id="impBtn" type="button">Перенести</button>
-    </div>`;
-}
-
-function bindImportUI() {
-  const b = $("#impBtn");
-  if (b) b.addEventListener("click", () => importPack("import/diana.json"));
-}
-
 function bindThemeUI() {
   document.querySelectorAll("[data-theme]").forEach(b =>
     b.addEventListener("click", () => {
@@ -4708,39 +4610,6 @@ function bindThemeUI() {
       toast(`Тема «${themeById(data.shop.theme).name}»`);
     }));
 }
-
-// разовый перенос из читалки: кладём записи в данные — дальше они уезжают в гист сами
-async function importPack(url) {
-  toast("Загружаю…");
-  try {
-    const r = await withTimeout(fetch(url + "?ts=" + Date.now(), { cache: "no-store" }), 15000);
-    if (!r.ok) throw new Error("файл не найден");
-    const pack = await r.json();
-
-    let addedShelf = 0, addedNotes = 0;
-    const haveArch = new Set((data.archive || []).map(a => a.id));
-    for (const a of pack.archive || []) {
-      if (haveArch.has(a.id)) continue;
-      data.archive.push(a); addedShelf++;
-    }
-    const haveTh = new Set((data.thoughts || []).map(t => t.id));
-    for (const t of pack.thoughts || []) {
-      if (haveTh.has(t.id)) continue;
-      data.thoughts.push(t); addedNotes++;
-    }
-
-    saveData();
-    if (gistReady()) await syncNow(true); else schedulePush();
-    closeSheet(); render();
-    toast(addedShelf || addedNotes
-      ? `Перенесено: ${addedShelf} на полку, ${addedNotes} в мысли`
-      : "Всё уже перенесено");
-  } catch (e) {
-    toast("Не вышло: " + (e.message || "ошибка"));
-  }
-}
-
-/* ── Резервная копия: файл со всеми данными профиля ── */
 
 function backupBlob() {
   const pack = {
@@ -4829,6 +4698,176 @@ function bindBackupUI() {
     load.addEventListener("click", () => file.click());
     file.addEventListener("change", () => { if (file.files[0]) restoreBackup(file.files[0]); });
   }
+}
+
+// разовый перенос из читалки: кладём записи в данные — дальше они уезжают в гист сами
+async function importPack(url) {
+  toast("Загружаю…");
+  try {
+    const r = await withTimeout(fetch(url + "?ts=" + Date.now(), { cache: "no-store" }), 15000);
+    if (!r.ok) throw new Error("файл не найден");
+    const pack = await r.json();
+
+    let addedShelf = 0, addedNotes = 0;
+    const haveArch = new Set((data.archive || []).map(a => a.id));
+    for (const a of pack.archive || []) {
+      if (haveArch.has(a.id)) continue;
+      data.archive.push(a); addedShelf++;
+    }
+    const haveTh = new Set((data.thoughts || []).map(t => t.id));
+    for (const t of pack.thoughts || []) {
+      if (haveTh.has(t.id)) continue;
+      data.thoughts.push(t); addedNotes++;
+    }
+
+    saveData();
+    if (gistReady()) await syncNow(true); else schedulePush();
+    closeSheet(); render();
+    toast(addedShelf || addedNotes
+      ? `Перенесено: ${addedShelf} на полку, ${addedNotes} в мысли`
+      : "Всё уже перенесено");
+  } catch (e) {
+    toast("Не вышло: " + (e.message || "ошибка"));
+  }
+}
+
+function importUI() {
+  if (profileId !== "diana") return "";
+  return `
+    <div class="freeze">
+      <div class="fz-head">📥 <b>Перенос из читалки</b> — прочитанные книги на полку, выписки в мысли</div>
+      <div class="fz-empty">Сейчас на полке: <b>${(data.archive || []).filter(a => !a.deleted).length}</b>,
+        мыслей: <b>${(data.thoughts || []).filter(t => !t.deleted).length}</b></div>
+      <button class="btn" id="impBtn" type="button">Перенести</button>
+    </div>`;
+}
+
+function bindImportUI() {
+  const b = $("#impBtn");
+  if (b) b.addEventListener("click", () => importPack("import/diana.json"));
+}
+
+/* ══════════ Настройки: отдельный экран с разделами ══════════ */
+
+const SETTINGS_SECTIONS = [
+  { id: "profile",   icon: "👤", name: "Профиль",       hint: () => profile().name },
+  { id: "sync",      icon: "🔄", name: "Синхронизация", hint: () => (cfg.token && cfg.gistId) ? "подключена" : "не подключена" },
+  { id: "goal",      icon: "🎯", name: "Цель на неделю", hint: () => `${data.weekGoal} ${plural(data.weekGoal, "день", "дня", "дней")}` },
+  { id: "look",      icon: "🎨", name: "Оформление",    hint: () => themeById(data.shop.theme).name },
+  { id: "materials", icon: "📦", name: "Материалы",     hint: () => hasMaterials() ? currentMaterial().title : "пусто" },
+  { id: "pause",     icon: "🌴", name: "Пауза",         hint: () => {
+      const n = (data.freezes || []).filter(f => !f.deleted).length;
+      return n ? `${n} ${plural(n, "период", "периода", "периодов")}` : "нет"; } },
+  { id: "data",      icon: "💾", name: "Данные",        hint: () => "копия и перенос" },
+  { id: "about",     icon: "稽", name: "О приложении",  hint: () => APP_VERSION }
+];
+
+function openSettingsSheet() {   // старое имя оставлено: на него завязаны баннеры и пустые состояния
+  settingsOpen = true; settingsView = null;
+  closeSheet();
+  render();
+}
+
+function renderSettings() {
+  if (settingsView) { renderSettingsSection(settingsView); return; }
+
+  $("#view").innerHTML = `
+    <h2 class="set-title">Настройки</h2>
+    <div class="set-list">
+      ${SETTINGS_SECTIONS.map(sec => `
+        <button class="set-row" data-sec="${sec.id}" type="button">
+          <span class="set-ic">${sec.icon}</span>
+          <span class="set-txt"><b>${sec.name}</b><em>${esc(String(sec.hint()))}</em></span>
+          <span class="mc-go">›</span>
+        </button>`).join("")}
+    </div>
+    <button class="btn set-back" id="setDone" type="button">Готово</button>`;
+
+  document.querySelectorAll("[data-sec]").forEach(b =>
+    b.addEventListener("click", () => {
+      settingsView = b.dataset.sec;
+      render();
+      $("#view").scrollTop = 0;
+    }));
+  $("#setDone").addEventListener("click", () => { settingsOpen = false; settingsView = null; render(); });
+}
+
+function renderSettingsSection(id) {
+  const sec = SETTINGS_SECTIONS.find(x => x.id === id) || SETTINGS_SECTIONS[0];
+  const connected = cfg.token && cfg.gistId;
+  let body = "";
+
+  if (id === "profile") {
+    body = `
+      <div class="info-note prof-note">
+        Сейчас: <b>${esc(profile().name)}</b>. У каждого профиля свои материалы и прогресс, гист общий.
+        <button class="btn" id="sProfile" type="button">Сменить профиль</button>
+      </div>`;
+  } else if (id === "sync") {
+    body = connected ? `
+      <div class="info-note">Гист <b>${esc(cfg.gistId)}</b>${cfg.lastSync ? ` · последняя сверка ${fmtDay(dateStr(new Date(cfg.lastSync)))}` : ""}</div>
+      <div class="sheet-actions">
+        <button class="btn gold" id="sSync" type="button">Синхронизировать сейчас</button>
+        <button class="btn danger" id="sOff" type="button">Отключить</button>
+      </div>
+      <div class="diag">${diagLine()}</div>` : `
+      <div class="info-note">
+        Подключи <b>GitHub Gist</b>, чтобы прогресс жил на всех устройствах.<br>
+        Токен: <a href="https://github.com/settings/tokens/new?description=%D0%9A%D1%8D%D0%B9%D0%BA%D0%BE&scopes=gist" target="_blank" rel="noopener">classic со scope gist</a>
+      </div>
+      <input class="note-input" id="sToken" type="password" placeholder="ghp_…" autocomplete="off">
+      <div class="sheet-actions"><button class="btn gold" id="sConnect" type="button">Подключить</button></div>`;
+  } else if (id === "goal") {
+    body = goalUI();
+  } else if (id === "look") {
+    body = themeUI();
+  } else if (id === "materials") {
+    body = archiveUI() || `<div class="empty-note">Материалов пока нет</div>`;
+  } else if (id === "pause") {
+    body = freezeUI();
+  } else if (id === "data") {
+    body = backupUI() + importUI();
+  } else {
+    body = `
+      <div class="info-note">Кэйко · версия ${APP_VERSION}</div>
+      <div class="sheet-actions">
+        <button class="btn" id="sAbout" type="button">Что такое кэйко</button>
+        <button class="btn" id="sUpdate" type="button">Обновить приложение</button>
+      </div>
+      ${shakeUI()}
+      <div class="diag">${diagLine()}</div>`;
+  }
+
+  $("#view").innerHTML = `
+    <button class="back" id="setBack" type="button">‹ Настройки</button>
+    <h2 class="set-title">${sec.icon} ${sec.name}</h2>
+    ${body}`;
+
+  $("#setBack").addEventListener("click", () => { settingsView = null; render(); $("#view").scrollTop = 0; });
+
+  const pr = $("#sProfile");
+  if (pr) pr.addEventListener("click", switchProfile);
+  const up = $("#sUpdate");
+  if (up) up.addEventListener("click", forceUpdate);
+  const ab = $("#sAbout");
+  if (ab) ab.addEventListener("click", openAboutSheet);
+  const sy = $("#sSync");
+  if (sy) sy.addEventListener("click", () => syncNow(true));
+  const off = $("#sOff");
+  if (off) off.addEventListener("click", () => {
+    if (!confirm("Отключить синхронизацию?\n\nЗаписи останутся на устройстве, но перестанут уходить в гист — и записывать новые будет нельзя, пока не подключишь снова.")) return;
+    cfg.token = ""; cfg.gistId = ""; saveCfg(); setSyncDot(""); render(); toast("Отключено");
+  });
+  const conn = $("#sConnect");
+  if (conn) conn.addEventListener("click", () => connectGitHub($("#sToken").value.trim()));
+
+  bindFreezeUI();
+  bindGoalUI();
+  bindThemeUI();
+  bindBackupUI();
+  bindImportUI();
+  bindShakeUI();
+  bindArchiveUI();
 }
 
 /* ══════════ Gist ══════════ */
