@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 87";
+const APP_VERSION = "2026.08.05 · 88";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -3642,7 +3642,7 @@ function achMaterials() {
     data.active = "piano"; data.piano.activePiece = p.id;
     const list = achState(); let f = factsState();
     out.push({ track: "piano", pieceId: p.id, icon: "🎹", title: p.name, sub: p.author,
-      cover: p.cover || "", ratio: p.ratio || "",
+      cover: coverSrc(p.id, p.cover || ""), ratio: p.ratio || "",
       open: list.filter(a => a.done).length, total: list.length,
       fOpen: f.filter(x => x.open).length, fTotal: f.length });
   }
@@ -3651,7 +3651,7 @@ function achMaterials() {
     data.book.activeBook = b.id;
     const l = achState(), fx = factsState();
     out.push({ track: "book", bookId: b.id, icon: "📖", title: b.title, sub: b.author,
-      cover: b.cover || "", ratio: b.ratio || "",
+      cover: coverSrc(b.id, b.cover || ""), ratio: b.ratio || "",
       open: l.filter(a => a.done).length, total: l.length,
       fOpen: fx.filter(x => x.open).length, fTotal: fx.length });
   }
@@ -3660,7 +3660,7 @@ function achMaterials() {
   let list = course().lessons.length ? achState() : []; let f = course().lessons.length ? factsState() : [];
   if (course().lessons.length)
     out.push({ track: "pastel", icon: "🎨", title: course().name, sub: course().author,
-      cover: course().cover || "", ratio: course().ratio || "",
+      cover: coverSrc("pastel", course().cover || ""), ratio: course().ratio || "",
       open: list.filter(a => a.done).length, total: list.length,
       fOpen: f.filter(x => x.open).length, fTotal: f.length });
 
@@ -4421,9 +4421,10 @@ const shelfItems = () => (data.archive || []).filter(a => !a.deleted)
 
 function shelfCoverHTML(a) {
   const own = [...data.book.books, ...(data.piano.pieces || [])].find(x => "bk_" + x.id === a.id || x.id === a.id);
-  if (own && own.cover) return `
+  const ownSrc = own ? coverSrc(own.id, own.cover || "") : "";
+  if (ownSrc) return `
     <div class="cover photo shelf-cover" style="aspect-ratio:${esc(own.ratio || "3 / 4.4")}">
-      <img src="${esc(own.cover)}" alt="${esc(a.title)}" loading="lazy" decoding="async">
+      <img src="${esc(ownSrc)}" alt="${esc(a.title)}" loading="lazy" decoding="async">
     </div>`;
   const cls = a.track === "book" ? `book ${a.tone || "sea"}`
     : a.track === "pastel" ? "pastel"
