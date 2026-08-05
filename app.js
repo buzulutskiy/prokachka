@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 63";
+const APP_VERSION = "2026.08.03 · 64";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -199,6 +199,7 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
+let online = navigator.onLine !== false;   // офлайн — не ошибка, а режим работы
 let editingThought = null; // мысль, которую сейчас правим
 let notesFocus = false;    // ставить ли курсор в поле мысли при следующем рендере
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
@@ -2395,16 +2396,41 @@ function renderBanner() {
 function crashScreen(e) {
   const box = $("#view");
   if (!box) return;
+
+  // первая попытка — молча снять service worker и перезагрузиться: чаще всего виноват он
+  let tried = "1";
+  try { tried = sessionStorage.getItem("keiko-selfheal") || ""; } catch {}
+  if (tried !== "1") {
+    try { sessionStorage.setItem("keiko-selfheal", "1"); } catch {}
+    (async () => {
+      try {
+        if (navigator.serviceWorker) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+        if (window.caches) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch {}
+      location.replace(location.origin + location.pathname + "?v=" + Date.now());
+    })();
+    box.innerHTML = `<div class="empty-state"><div class="es-mark">稽古</div><h2>Восстанавливаю…</h2></div>`;
+    return;
+  }
+
   box.innerHTML = `
     <div class="empty-state">
       <div class="es-mark">稽古</div>
       <h2>Что-то пошло не так</h2>
-      <p>Данные целы — сбой в самом приложении. Нажми «Обновить», это переустановит его начисто.</p>
-      <button class="btn gold" id="crashUpd" type="button" style="max-width:260px">Обновить приложение</button>
-      <p style="font-size:0.7rem;opacity:0.6">${esc(String(e && e.message || e || ""))}</p>
+      <p>Данные целы — сбой в самом приложении. Кнопка ниже переустановит его начисто.</p>
+      <button class="btn gold" id="crashUpd" type="button" style="max-width:280px">Переустановить</button>
+      <p class="crash-why">${esc(String((e && e.message) || e || ""))}</p>
     </div>`;
   const b = $("#crashUpd");
-  if (b) b.addEventListener("click", forceUpdate);
+  if (b) b.addEventListener("click", () => {
+    location.replace(location.origin + location.pathname + "?reset=1");
+  });
 }
 
 function render() {
@@ -4686,7 +4712,10 @@ function schedulePush() {
 /* ══════════ Запуск ══════════ */
 
 function init() {
-  try { boot(); } catch (e) { console.error(e); crashScreen(e); }
+  try {
+    boot();
+    try { sessionStorage.removeItem("keiko-selfheal"); } catch {}
+  } catch (e) { console.error(e); crashScreen(e); }
 }
 
 function boot() {
@@ -4706,11 +4735,15 @@ function boot() {
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();
 
-  // без него приложение не открывается офлайн: sw.js кэширует оболочку
+  // без него приложение не открывается офлайн: sw.js кэширует оболочку.
+  // Ставим с задержкой и только если запуск прошёл без сбоев
   if ("serviceWorker" in navigator) {
     setTimeout(() => {
+      let broken = "";
+      try { broken = sessionStorage.getItem("keiko-selfheal") || ""; } catch {}
+      if (broken === "1") return;
       navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
-    }, 1200);
+    }, 2500);
   }
 
   window.addEventListener("online", () => {
