@@ -23,11 +23,13 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 76";
+const APP_VERSION = "2026.08.03 · 77";
 
 const DEFAULT_PIECES = [
-  { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
-  { id: "more", author: "Микаэл Таривердиев", name: "Мальчики и море", bars: 37, art: "wave", tone: "sea" }
+  { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
+    cover: "covers/bwv853.jpg", ratio: "509 / 720" },
+  { id: "more", author: "Микаэл Таривердиев", name: "Мальчики и море", bars: 37, art: "wave", tone: "sea",
+    cover: "covers/more.jpg", ratio: "508 / 720" }
 ];
 // Курс пастели — данные из pastel-course-viewer
 const DEFAULT_COURSE = {
@@ -2598,7 +2600,7 @@ function coverOf(item) {
     const b = item.book || book();
     if (b.cover) return `
       <div class="cover photo" style="aspect-ratio:${esc(b.ratio || "3 / 4.4")}">
-        <img src="${esc(b.cover)}" alt="${esc(b.title)}" decoding="async" fetchpriority="high">
+        <img src="${esc(b.cover)}" alt="${esc(b.title)}" width="465" height="720" decoding="async" fetchpriority="high">
       </div>`;
     return `
       <div class="cover book ${esc(b.tone || "sea")}">
@@ -2623,6 +2625,10 @@ function coverOf(item) {
       </div>`;
   }
   const p = item.piece;
+  if (p.cover) return `
+    <div class="cover photo" style="aspect-ratio:${esc(p.ratio || "3 / 4.4")}">
+      <img src="${esc(p.cover)}" alt="${esc(p.name)}" width="509" height="720" decoding="async" fetchpriority="high">
+    </div>`;
   return `
     <div class="cover piano ${esc(p.tone || "violet")}">
       <div><div class="cv-author">${esc(p.author || "")}</div></div>
