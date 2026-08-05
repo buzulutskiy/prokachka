@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.05 · 83";
+const APP_VERSION = "2026.08.05 · 84";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet",
@@ -5045,6 +5045,164 @@ function restoreBackup(file) {
   reader.readAsText(file);
 }
 
+/* ══════════ Автокопия ══════════
+   Раз в неделю кладём снимок всех данных в отдельный гист-архив: файл на месяц,
+   двенадцать последних месяцев. Основной гист может испортиться или пропасть —
+   архив живёт отдельно и не требует ни одного нажатия. */
+
+const ARCH_FILE = (d = new Date()) =>
+  `keiko-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}.json`;
+const ARCH_KEEP = 12;
+const ARCH_EVERY = 7 * 864e5;
+
+async function ensureArchiveGist() {
+  if (cfg.archiveId) return cfg.archiveId;
+  const r = await gh("/gists?per_page=100");
+  if (!r.ok) throw new Error("список гистов недоступен");
+  const found = (await r.json()).find(g => (g.description || "").startsWith("Кэйко — архив"));
+  if (found) { cfg.archiveId = found.id; saveCfg(); return found.id; }
+
+  const cr = await gh("/gists", {
+    method: "POST",
+    body: JSON.stringify({
+      description: "Кэйко — архив копий (создаётся приложением)",
+      public: false,
+      files: { "readme.md": { content: "Снимки данных Кэйко. По файлу на месяц, последние 12." } }
+    })
+  });
+  if (!cr.ok) throw new Error("архив не создался");
+  cfg.archiveId = (await cr.json()).id; saveCfg();
+  return cfg.archiveId;
+}
+
+// box — то, что сейчас лежит в основном гисте: конверт с обоими профилями
+async function archiveNow(box, manual) {
+  const id = await ensureArchiveGist();
+  const files = { [ARCH_FILE()]: { content: JSON.stringify({ ...box, archivedAt: now(), by: profileId }) } };
+
+  // ротация: держим только последние снимки, лишние удаляем (значение null)
+  const r = await gh("/gists/" + id);
+  if (r.ok) {
+    const names = Object.keys((await r.json()).files || {})
+      .filter(n => n.startsWith("keiko-") && n !== ARCH_FILE())
+      .sort();
+    const extra = names.length - (ARCH_KEEP - 1);
+    for (let i = 0; i < extra; i++) files[names[i]] = null;
+  }
+
+  const up = await gh("/gists/" + id, { method: "PATCH", body: JSON.stringify({ files }) });
+  if (!up.ok) throw new Error("копия не записалась");
+  cfg.lastArchive = now(); saveCfg();
+  if (manual) toast("Копия сохранена в архив");
+}
+
+// вызывается после удачной синхронизации: раз в неделю и молча
+function maybeArchive(box) {
+  if (!cfg.token || !cfg.gistId || cfg.archiveOff) return;   // по умолчанию включена
+  if (now() - (cfg.lastArchive || 0) < ARCH_EVERY) return;
+  archiveNow(box, false).catch(() => {});   // не получилось — попробуем в следующий раз
+}
+
+// список снимков в архиве: для восстановления
+async function archiveList() {
+  if (!cfg.archiveId) return [];
+  const r = await gh("/gists/" + cfg.archiveId);
+  if (!r.ok) throw new Error("архив недоступен");
+  const g = await r.json();
+  return Object.values(g.files || {})
+    .filter(f => f.filename.startsWith("keiko-"))
+    .sort((a, b) => b.filename.localeCompare(a.filename));
+}
+
+// восстановление из снимка: то же слияние, что и у файла с устройства
+async function restoreArchive(file) {
+  let txt = file.content;
+  if (file.truncated && file.raw_url) txt = await (await withTimeout(fetch(file.raw_url), 15000)).text();
+  let box;
+  try { box = JSON.parse(txt); } catch { toast("Снимок не читается"); return; }
+  const d = migrate((box.profiles && box.profiles[profileId]) || null);
+  if (!d || !d.piano) { toast("В снимке нет этого профиля"); return; }
+
+  const before = dataStamp();
+  data.piano.entries = mergeLists(data.piano.entries, d.piano.entries || []);
+  data.book.entries = mergeLists(data.book.entries, d.book.entries || []);
+  data.pastel.entries = mergeLists(data.pastel.entries, d.pastel.entries || []);
+  data.thoughts = mergeLists(data.thoughts || [], d.thoughts || []);
+  data.archive = mergeLists(data.archive || [], d.archive || []);
+  data.freezes = mergeLists(data.freezes || [], d.freezes || []);
+  for (const p of (d.piano.pieces || [])) if (!data.piano.pieces.some(x => x.id === p.id)) data.piano.pieces.push(p);
+  for (const b of (d.book.books || [])) if (!data.book.books.some(x => x.id === b.id)) data.book.books.push(b);
+
+  normalizeActive();
+  saveData(); schedulePush(); render();
+  toast(before === dataStamp() ? "Всё это уже было" : "Данные восстановлены");
+}
+
+function archiveBackupUI() {
+  if (!cfg.token || !cfg.gistId)
+    return `<div class="freeze"><div class="fz-head">☁️ <b>Автокопия</b> — появится, когда подключишь синхронизацию</div></div>`;
+
+  const when = cfg.lastArchive ? fmtDay(dateStr(new Date(cfg.lastArchive))) : "ещё не делалась";
+  return `
+    <div class="freeze">
+      <div class="fz-head">☁️ <b>Автокопия</b> — раз в неделю снимок всех данных уезжает в отдельный гист-архив, ${ARCH_KEEP} последних месяцев</div>
+      <div class="fz-empty">Последняя: ${esc(when)}${cfg.archiveOff ? " · выключена" : ""}</div>
+      <div class="fz-form2">
+        <button class="btn" id="arcNow" type="button">Сделать копию сейчас</button>
+        <button class="btn" id="arcList" type="button">Копии в архиве</button>
+      </div>
+      <div id="arcBox"></div>
+      <div class="pick-row" style="margin-top:8px">
+        <button class="pick ${!cfg.archiveOff ? "on" : ""}" data-arc="on" type="button"><span class="pk-name">Включена</span></button>
+        <button class="pick ${cfg.archiveOff ? "on" : ""}" data-arc="off" type="button"><span class="pk-name">Выключена</span></button>
+      </div>
+    </div>`;
+}
+
+function bindArchiveBackupUI() {
+  const now_ = $("#arcNow"), list = $("#arcList"), box = $("#arcBox");
+
+  if (now_) now_.addEventListener("click", async () => {
+    now_.disabled = true; toast("Сохраняю…");
+    try {
+      const r = await gh("/gists/" + cfg.gistId);
+      if (!r.ok) throw new Error("основной гист недоступен");
+      const f = (await r.json()).files[GIST_FILE];
+      let txt = f.content;
+      if (f.truncated && f.raw_url) txt = await (await withTimeout(fetch(f.raw_url), 15000)).text();
+      await archiveNow(JSON.parse(txt), true);
+      render();
+    } catch (e) { toast(e.message || "Не получилось"); now_.disabled = false; }
+  });
+
+  if (list && box) list.addEventListener("click", async () => {
+    box.innerHTML = `<div class="fz-empty">Смотрю…</div>`;
+    try {
+      const files = await archiveList();
+      if (!files.length) { box.innerHTML = `<div class="fz-empty">Пока пусто</div>`; return; }
+      box.innerHTML = files.map(f => `
+        <button class="arc-row" data-arcfile="${esc(f.filename)}" type="button">
+          <b>${esc(f.filename.replace("keiko-", "").replace(".json", ""))}</b>
+          <em>${Math.round((f.size || 0) / 1024)} КБ · восстановить</em>
+        </button>`).join("");
+      box.querySelectorAll("[data-arcfile]").forEach(b =>
+        b.addEventListener("click", () => {
+          const f = files.find(x => x.filename === b.dataset.arcfile);
+          if (!f) return;
+          if (!confirm(`Восстановить из снимка «${f.filename}»?\n\nНичего не сотрётся: записи сольются с нынешними.`)) return;
+          restoreArchive(f).catch(() => toast("Не получилось"));
+        }));
+    } catch (e) { box.innerHTML = `<div class="fz-empty">${esc(e.message || "не вышло")}</div>`; }
+  });
+
+  document.querySelectorAll("[data-arc]").forEach(b =>
+    b.addEventListener("click", () => {
+      cfg.archiveOff = b.dataset.arc === "off";
+      saveCfg(); render();
+      toast(cfg.archiveOff ? "Автокопия выключена" : "Автокопия включена");
+    }));
+}
+
 function backupUI() {
   const counts = [
     [data.piano.entries.length + data.book.entries.length + data.pastel.entries.length, "занятие", "занятия", "занятий"],
@@ -5199,7 +5357,7 @@ function renderSettingsSection(id) {
   } else if (id === "pause") {
     body = freezeUI();
   } else if (id === "data") {
-    body = backupUI() + importUI();
+    body = archiveBackupUI() + backupUI() + importUI();
   } else {
     body = `
       <div class="info-note">Кэйко · версия ${APP_VERSION}</div>
@@ -5239,6 +5397,7 @@ function renderSettingsSection(id) {
   bindThemeUI();
   bindDailyUI();
   bindBackupUI();
+  bindArchiveBackupUI();
   bindImportUI();
   bindShakeUI();
   bindArchiveUI();
@@ -5354,6 +5513,7 @@ async function syncNow(manual) {
       if (!pr.ok) throw new Error("Не сохранилось");
     }
     cfg.lastSync = now(); saveCfg(); setSyncDot("ok");
+    maybeArchive(box);                  // раз в неделю снимок уезжает в архив, молча
     syncError = "";
     syncPickers();
     if (stampBefore !== dataStamp()) render(true);   // тихо и только если данные правда изменились
