@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 57";
+const APP_VERSION = "2026.08.03 · 58";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -199,6 +199,7 @@ let data = null;
 let cfg = { token: "", gistId: "", lastSync: 0, tab: "home", period: "week", achView: null, shake: false, shakeAsked: false };
 let period = "week";   // week | month — что показываем на «Прогрессе»
 let achView = null;    // {track, pieceId} — открытый материал на вкладке наград
+let notesView = null;      // выбранный материал в разделе «Мысли»
 let achTop = "mats";        // верхний уровень «Достижений»: материалы или полка
 let achTab = "ach";          // вкладка внутри материала: достижения / знания
 let tab = "home";                 // home | progress | ach | overview
@@ -264,7 +265,7 @@ function emptyData() {
     book: { books: DIANA_BOOKS.map(b => ({ ...b, updatedAt: 0 })), activeBook: DIANA_BOOKS[0].id, entries: [] },
     pastel: { course: null, entries: [] },
     shop: { theme: "rose", purchases: [] },
-    weekGoal: 4, freezes: [], archive: []
+    thoughts: [], weekGoal: 4, freezes: [], archive: []
   };
   return {
     active: "piano",
@@ -272,6 +273,7 @@ function emptyData() {
     book: { books: DEFAULT_BOOKS.map(b => ({ ...b, updatedAt: 0 })), activeBook: DEFAULT_BOOKS[0].id, entries: [] },
     pastel: { course: { ...DEFAULT_COURSE, updatedAt: 0 }, entries: [] },
     shop: { theme: "dusk", purchases: [] },   // купленные темы и мелочи
+    thoughts: [],  // мысли по ходу материала — отдельно от отметок занятий
     weekGoal: 4,   // общая цель: сколько дней в неделю заниматься чем угодно
     freezes: [],   // периоды паузы: отпуск, болезнь — серия их не замечает
     archive: []    // пройденные материалы
@@ -364,6 +366,7 @@ function migrate(obj) {
     if (typeof obj.shop.theme === "string") base.shop.theme = obj.shop.theme;
   }
   if (Number(obj.weekGoal) > 0) base.weekGoal = Math.min(7, Math.round(obj.weekGoal));
+  if (Array.isArray(obj.thoughts)) base.thoughts = obj.thoughts;
   if (Array.isArray(obj.freezes)) base.freezes = obj.freezes;
   if (Array.isArray(obj.archive)) base.archive = obj.archive;
 
@@ -2407,6 +2410,7 @@ function renderInner() {
   $("#view").className = tab === "home" ? "fixed" : "scrolls";
   if (tab === "home") renderHome();
   else if (tab === "progress") renderProgress();
+  else if (tab === "notes") renderNotes();
   else if (tab === "shop") renderShop();
   else renderAch();
 }
@@ -2430,6 +2434,7 @@ function renderTabbar() {
     [ "home", ICON("home", "◉"), T("tabHome")],
     ["progress", ICON("progress", "▤"), T("tabProgress")],
     ["ach", ICON("ach", "✦"), `${T("tabAch")} ${openCount}`],
+    ["notes", ICON("notes", "✎"), T("tabNotes")],
     ["shop", ICON("shop", "◍"), `${coins()} ${T("coin")}`]
   ].map(([id, ic, nm]) =>
     `<button data-tab="${id}" class="${tab === id ? "on" : ""}" type="button"><i>${ic}</i>${nm}</button>`).join("");
@@ -3628,6 +3633,153 @@ function switchProfile() {
   location.replace(location.origin + location.pathname + "?v=" + encodeURIComponent(APP_VERSION));
 }
 
+/* ══════════ Мысли ══════════
+   Свой раздел: мысль не отмечает занятие и не влияет на серию —
+   это читательский дневник, привязанный к месту в материале. */
+
+const thoughts = () => (data.thoughts || []).filter(t => !t.deleted);
+const thoughtsOf = (key) => thoughts().filter(t => t.key === key)
+  .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+// ключ материала — тот же, по которому лежат карточки знаний
+function keyOf(m) {
+  if (m.track === "book") return m.bookId || "";
+  if (m.track === "pastel") return "pastel";
+  return m.pieceId || "";
+}
+const currentKey = () => isBook() ? book().id : isPastel() ? "pastel" : (piece() ? piece().id : "");
+
+// где человек сейчас — подставим в новую мысль
+function whereNow(track) {
+  if (track === "book") return { unit: "page", at: bookProgress() };
+  if (track === "pastel") return { unit: "lesson", at: doneLessons().size };
+  const p = passes();
+  let last = 0;
+  for (let i = 1; i < p.right.length; i++) if (p.right[i] || p.left[i]) last = i;
+  return { unit: "bar", at: last };
+}
+const whereLabel = (t) => t.unit === "page" ? `стр. ${t.at}`
+  : t.unit === "lesson" ? `урок ${t.at}`
+  : `такт ${t.at}`;
+
+function renderNotes() {
+  if (!hasMaterials()) { renderEmpty("Мыслей пока нет", "Они появятся вместе с первым материалом."); return; }
+  if (notesView) { renderNotesMaterial(notesView); return; }
+
+  const mats = achMaterials();
+  $("#view").innerHTML = `
+    <div class="mat-list">
+      ${mats.map(m => {
+        const n = thoughtsOf(keyOf(m)).length;
+        return `
+        <button class="mat-card" data-notes="${esc(keyOf(m))}" data-track="${m.track}"
+          data-piece="${m.pieceId || ""}" data-book="${m.bookId || ""}" type="button">
+          <span class="mc-tile t-${m.track}"><i>${m.icon}</i></span>
+          <span class="mc-body">
+            <span class="mc-title">${esc(m.title)}</span>
+            ${m.sub ? `<span class="mc-sub">${esc(m.sub)}</span>` : ""}
+            <span class="mc-tags"><em>✎ ${n || "пока пусто"}</em></span>
+          </span>
+          <span class="mc-go">›</span>
+        </button>`;
+      }).join("")}
+    </div>`;
+
+  document.querySelectorAll("[data-notes]").forEach(b =>
+    b.addEventListener("click", () => {
+      notesView = { key: b.dataset.notes, track: b.dataset.track,
+        pieceId: b.dataset.piece || null, bookId: b.dataset.book || null };
+      cfg.notesView = notesView; saveCfg();
+      renderNotes();
+      $("#view").scrollTop = 0;
+    }));
+}
+
+function renderNotesMaterial(view) {
+  const mats = achMaterials();
+  const m = mats.find(x => keyOf(x) === view.key) || mats[0];
+  const list = thoughtsOf(view.key);
+  const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+
+  $("#view").innerHTML = `
+    <button class="back" id="notesBack" type="button">‹ Все материалы</button>
+
+    <div class="ach-top">
+      <div class="ach-hero">
+        <span class="mc-tile big t-${m.track}"><i>${m.icon}</i></span>
+        <span class="ach-hero-txt">
+          <b>${esc(m.title)}</b>
+          <em>${list.length ? `${list.length} ${plural(list.length, "мысль", "мысли", "мыслей")}` : "мыслей пока нет"}</em>
+        </span>
+      </div>
+    </div>
+
+    <button class="btn gold add-thought" id="addThought" type="button">✎ Записать мысль</button>
+
+    ${list.length ? `<div class="feed">
+      ${list.map(t => `
+        <article class="post thought">
+          <div class="th-meta">${esc(whereLabel(t))} · ${esc(fmt.format(fromStr(t.date)))}
+            <button class="th-del" data-th="${t.id}" type="button">✕</button>
+          </div>
+          <p class="post-text">${esc(t.text)}</p>
+        </article>`).join("")}
+    </div>` : `<div class="empty-note">Здесь будут мысли, которые приходят по ходу.<br>Первую можно записать прямо сейчас.</div>`}`;
+
+  $("#notesBack").addEventListener("click", () => {
+    notesView = null; cfg.notesView = null; saveCfg();
+    renderNotes();
+    $("#view").scrollTop = 0;
+  });
+  $("#addThought").addEventListener("click", () => openThoughtSheet(view, m));
+
+  document.querySelectorAll("[data-th]").forEach(b =>
+    b.addEventListener("click", () => {
+      if (!confirm("Удалить эту мысль?")) return;
+      const t = (data.thoughts || []).find(x => x.id === b.dataset.th);
+      if (!t) return;
+      t.deleted = true; t.updatedAt = now();
+      saveData(); schedulePush(); renderNotes();
+    }));
+}
+
+function openThoughtSheet(view, m) {
+  const where = withMaterial(view, () => whereNow(view.track));
+  const unitName = where.unit === "page" ? "Страница" : where.unit === "lesson" ? "Урок" : "Такт";
+
+  sheetMode = "thought";
+  openSheet(`
+    <h3>Мысль</h3>
+    <p class="sub">${esc(m.title)}</p>
+    <div class="th-form">
+      <label class="th-lab">${unitName}
+        <input class="note-input" id="thAt" type="number" inputmode="numeric" min="0" max="9999" value="${where.at}">
+      </label>
+      <textarea class="note-input th-text" id="thText" rows="6"
+        placeholder="Что подумалось? Пара строк для себя"></textarea>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn gold" id="thSave" type="button">Сохранить</button>
+      <button class="btn" id="thClose" type="button">Отмена</button>
+    </div>`);
+
+  $("#thClose").addEventListener("click", closeSheet);
+  $("#thSave").addEventListener("click", () => {
+    const text = ($("#thText").value || "").trim();
+    if (!text) { toast("Напиши пару слов"); return; }
+    data.thoughts.push({
+      id: uid(), key: view.key, track: view.track,
+      unit: where.unit, at: Math.max(0, Math.round(Number($("#thAt").value) || 0)),
+      text: text.slice(0, 2000), date: todayStr(),
+      createdAt: now(), updatedAt: now()
+    });
+    saveData(); schedulePush();
+    closeSheet();
+    renderNotes();
+    toast("Записано");
+  });
+}
+
 /* ══════════ Монеты и магазин ══════════
    Баланс считается из данных: заработано минус потрачено.
    Ничего не хранится отдельно — значит, ничто не разъедется при синхронизации. */
@@ -3743,7 +3895,7 @@ const THEMES = [
 
 /* Словарь интерфейса: тема-мир может переписать формулировки под себя */
 const WORDS_BASE = {
-  tabHome: "Главная", tabProgress: "Прогресс", tabAch: "Достижения", tabShop: "Магазин",
+  tabHome: "Главная", tabProgress: "Прогресс", tabAch: "Достижения", tabNotes: "Мысли", tabShop: "Магазин",
   ctaPiano: "🎹 Отметить занятие", ctaBook: "📖 Отметить чтение", ctaPastel: "🎨 Отметить урок",
   ctaDone: "✅ Сегодня отмечено", ctaAdd: "дополнить",
   coins: "монет", coin: "🪙", streak: "серия",
@@ -4537,7 +4689,7 @@ async function connectGitHub(token) {
   }
 }
 
-const exportData = () => ({ v: 7, savedAt: now(), active: data.active, weekGoal: data.weekGoal, shop: data.shop, piano: data.piano, book: data.book, pastel: data.pastel, freezes: data.freezes, archive: data.archive });
+const exportData = () => ({ v: 7, savedAt: now(), active: data.active, weekGoal: data.weekGoal, shop: data.shop, thoughts: data.thoughts, piano: data.piano, book: data.book, pastel: data.pastel, freezes: data.freezes, archive: data.archive });
 
 function mergeLists(local, remote) {
   const map = new Map();
@@ -4575,6 +4727,7 @@ async function syncNow(manual) {
     data.pastel.entries = mergeLists(data.pastel.entries, remote.pastel.entries);
     if (remote.weekGoal && (remote.savedAt || 0) > (cfg.lastSync || 0)) data.weekGoal = remote.weekGoal;
     data.freezes = mergeLists(data.freezes, remote.freezes);
+    data.thoughts = mergeLists(data.thoughts, remote.thoughts || []);
     if (remote.shop) {
       data.shop.purchases = mergeLists(data.shop.purchases, remote.shop.purchases || []);
       if ((remote.savedAt || 0) > (cfg.lastSync || 0)) {
@@ -4626,12 +4779,13 @@ function boot() {
   load();
   normalizeActive();
   saveData();   // закрепляем данные в актуальной схеме сразу после миграции
-  if (["home", "progress", "ach", "shop"].includes(cfg.tab)) tab = cfg.tab;
+  if (["home", "progress", "ach", "notes", "shop"].includes(cfg.tab)) tab = cfg.tab;
   applyTheme(data.shop.theme);
   if (["week", "month"].includes(cfg.period)) period = cfg.period;
   if (cfg.achView && cfg.achView.track) achView = cfg.achView;
   if (cfg.achTab === "facts") achTab = "facts";
   if (cfg.achTop === "shelf") achTop = "shelf";
+  if (cfg.notesView && cfg.notesView.key) notesView = cfg.notesView;
   const t = new Date();
   calYear = t.getFullYear(); calMonth = t.getMonth();
   syncPickers();
