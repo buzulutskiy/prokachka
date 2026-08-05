@@ -23,7 +23,7 @@ const LS = {
   }
 };
 const GIST_FILE = "prokachka.json";
-const APP_VERSION = "2026.08.03 · 68";
+const APP_VERSION = "2026.08.03 · 69";
 
 const DEFAULT_PIECES = [
   { id: "bwv853", author: "И. С. Бах", name: "Прелюдия es-moll, BWV 853", bars: 40, art: "keys", tone: "violet" },
@@ -3712,7 +3712,12 @@ function renderNotes() {
   const list = thoughts().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const fmt = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
   const clock = new Intl.DateTimeFormat("ru", { hour: "2-digit", minute: "2-digit" });
-  const when = (t) => fmt.format(fromStr(t.date)) + (t.createdAt ? ", " + clock.format(new Date(t.createdAt)) : "");
+  const nowYear = new Date().getFullYear();
+  const when = (t) => {
+    const d = fromStr(t.date);
+    const year = d.getFullYear() !== nowYear ? " " + d.getFullYear() : "";
+    return fmt.format(d) + year + (t.createdAt ? ", " + clock.format(new Date(t.createdAt)) : "");
+  };
   const arch = (data.archive || []).filter(a => !a.deleted);
   const titleOf = (t) => {
     const m = mats.find(x => keyOf(x) === t.key);
@@ -4092,10 +4097,12 @@ function openShelfSheet(id) {
 
 function openSheet(html) {
   const sheet = $("#sheet");
-  sheet.innerHTML = `<div class="grab-zone"><div class="grabber"></div></div>` + html;
+  sheet.innerHTML = `<div class="grab-zone"><div class="grabber"></div></div>` +
+    `<div class="sheet-body">${html}</div>`;
   sheet.classList.add("show");
   $("#sheetBg").classList.add("show");
-  sheet.scrollTop = 0;
+  const body0 = sheet.querySelector('.sheet-body');
+  if (body0) body0.scrollTop = 0;
   setupSheetDrag(sheet);
 }
 
@@ -4106,7 +4113,8 @@ function setupSheetDrag(sheet) {
   const onDown = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     fromGrab = !!e.target.closest(".grab-zone");
-    if (!fromGrab && sheet.scrollTop > 0) return;   // внутри прокрутки — не мешаем
+    const body = sheet.querySelector('.sheet-body');
+    if (!fromGrab && body && body.scrollTop > 0) return;   // внутри прокрутки — не мешаем
     dragging = true; startY = e.clientY; dy = 0;
     sheet.style.transition = "none";
   };

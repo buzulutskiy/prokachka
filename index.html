@@ -1022,26 +1022,32 @@
       border-radius: 26px 26px 0 0;
       border-top: 1px solid var(--glass-line);
       box-shadow: inset 0 1px 0 var(--glass-hi), 0 -20px 60px rgba(0, 0, 0, 0.5);
-      padding: 8px 16px max(20px, calc(env(safe-area-inset-bottom) + 6px));
+      padding: 0;
       transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       overscroll-behavior: contain;
       z-index: 31;
-      max-height: 92vh; overflow-y: auto;
+      max-height: 92vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;                       /* вбок ничего не ездит */
     }
     .sheet.show { transform: translateX(-50%) translateY(0); }
     /* зона захвата: тянешь её — уезжает вся шторка */
     .grab-zone {
-      position: sticky; top: 0; z-index: 2;
-      margin: -8px -16px 6px;
-      padding: 10px 16px 8px;
-      background: linear-gradient(180deg, var(--sheet-solid) 55%, transparent);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      flex-shrink: 0;
+      padding: 11px 16px 9px;
       cursor: grab;
       touch-action: none;
     }
     .grab-zone:active { cursor: grabbing; }
     .grabber { width: 44px; height: 5px; border-radius: 3px; background: #3a3550; margin: 0 auto; }
+
+    .sheet-body {
+      flex: 1; min-height: 0;
+      overflow-y: auto; overflow-x: hidden;
+      overscroll-behavior: contain;
+      padding: 0 16px max(20px, calc(env(safe-area-inset-bottom) + 6px));
+    }
+    .sheet-body > * { max-width: 100%; }
 
     .sheet h3 { margin: 0 0 4px; font-size: 1.15rem; }
     .sheet .sub { margin: 0 0 16px; color: var(--muted); font-size: 0.86rem; }
